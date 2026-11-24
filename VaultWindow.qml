@@ -381,15 +381,6 @@ FloatingWindow {
               font.family: win.fontFamily
               font.pixelSize: Style.font.caption
             }
-            Text {
-              visible: !!win.service && win.service.devNoGate
-              textFormat: Text.PlainText
-              text: win.t("window.devNoGate")
-              color: win.errorColor
-              font.family: win.fontFamily
-              font.pixelSize: Style.font.caption
-              font.weight: Font.DemiBold
-            }
           }
         }
         Row {

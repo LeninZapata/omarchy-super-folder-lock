@@ -39,22 +39,11 @@ Item {
   // Hasta pasar la clave del sistema no se carga NADA del registro; al cerrar la ventana
   // (y al bloquear la pantalla, A6) la puerta se cierra y la lista se vacía.
   property bool gateOpen: false
-  // Solo desarrollo (PLAN.md §3): con `.dev-no-gate` en la carpeta del plugin la puerta se
-  // salta para probar la ventana sin la clave del sistema. Nunca se publica (.gitignore) y no abre
-  // nada que un proceso del usuario no pueda leer ya (el registro está en claro).
-  property bool devNoGate: false
-  readonly property string pluginDir: String(Qt.resolvedUrl(".")).replace(/^file:\/\//, "").replace(/\/$/, "")
 
   function openGate() {
     gateOpen = true
     touch()
     refresh()
-  }
-
-  Process {
-    id: devProc
-    command: ["test", "-e", root.pluginDir + "/.dev-no-gate"]
-    onExited: function(code) { root.devNoGate = code === 0 }
   }
 
   function isOpen(id) { return openIds.indexOf(id) !== -1 }
@@ -94,7 +83,7 @@ Item {
   Process {
     id: ruleProc
     onExited: {
-      root.gateOpen = root.devNoGate
+      root.gateOpen = false
       root.touch()
       root.windowOpen = true
       root.refresh()
@@ -694,7 +683,6 @@ Item {
     initProc.running = true
     activeWorkspaceId = Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : -1
     pidProc.running = true
-    devProc.running = true
     helper(["lockall"], "", function(r) { root.refresh() })
   }
 
@@ -729,7 +717,6 @@ Item {
         busy: root.busyId !== "",
         shellPid: root.shellPid,
         gateOpen: root.gateOpen,
-        devNoGate: root.devNoGate,
         listed: root.folders.length,
         idleTargets: root.idleTargets,
         idleSince: root.idleSince,

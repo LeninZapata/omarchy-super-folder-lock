@@ -65,7 +65,6 @@
   "gate.busy": "Comprobando…",
   "gate.wrong": "Clave incorrecta · %1 intentos más",
   "gate.locked": "Demasiados intentos. Espera %1 s (también afecta al bloqueo de sesión y a sudo)",
-  "window.devNoGate": "DEV · puerta desactivada (.dev-no-gate)",
   "settings.title": "Ajustes",
   "settings.showBarIcon": "Mostrar el icono en la barra",
   "settings.hint": "Valores para las carpetas cuya regla está en «General». Sin el icono, se abre desde el lanzador de apps.",

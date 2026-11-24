@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "author": "leninzapata",
   "license": "MIT",
-  "description": "Encrypted folders (gocryptfs) behind your password: hidden while locked, and locked again automatically when you leave the computer or the workspace",
+  "description": "Folders with a password: hide them without copying anything, or encrypt them (gocryptfs). They lock again automatically when you leave the computer or the workspace",
   "kinds": [
     "service",
     "bar-widget"

@@ -65,7 +65,6 @@
   "gate.busy": "Checking…",
   "gate.wrong": "Wrong password · %1 tries left",
   "gate.locked": "Too many attempts. Wait %1 s (this also affects the session lock and sudo)",
-  "window.devNoGate": "DEV · password gate disabled (.dev-no-gate)",
   "settings.title": "Settings",
   "settings.showBarIcon": "Show icon in the bar",
   "settings.hint": "Defaults for every folder whose rule is «Default». Without the bar icon, open it from the app launcher.",
