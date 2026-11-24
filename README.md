@@ -243,9 +243,7 @@ omarchy-shell leninzapata.super-folder-lock status    # JSON: how many are open;
 └── tests/                # python and node tests, in a sandbox with its own home
 ```
 
-- Run the tests: `tests/run.sh`
-- Validate the manifest: `omarchy plugin validate .`
-- After editing, reload the shell: `omarchy restart shell`
+Run the tests with `tests/run.sh`; after editing, reload with `omarchy restart shell`.
 
 ## License
 
