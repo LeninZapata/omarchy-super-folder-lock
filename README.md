@@ -36,8 +36,9 @@ folders lock again. Each rule can be changed for one folder or for all of them.
 
 ![With a folder open and its photos in a viewer, leaving the workspace locks it: the folder is gone and the next photo does not load](docs/demo/autolock.gif)
 
-**Encrypt what must stay safe.** For a new or empty folder, *Encrypt* stores what you put inside in a
-gocryptfs vault, which only its password opens, on any computer. It hands you a recovery key once.
+**Encrypt your most private files.** *Hide* is the normal option; *Encrypt* is for files nobody else may
+read, not even by taking the disk out. Files are encrypted as they are saved inside (a gocryptfs vault),
+so it starts as a new or empty folder. It hands you a recovery key once.
 
 ![An encrypted folder is created, its recovery key is shown, and on the disk its files have unreadable names](docs/demo/encrypt.gif)
 
@@ -48,7 +49,7 @@ password and gives you back a normal folder. Only then does it leave the list: n
 
 ## Two lock types
 
-| | Hide (default) | Encrypt |
+| | Hide (the normal option) | Encrypt (for your most private files) |
 |---|---|---|
 | How it works | The folder is moved out of sight, on the same disk | A [gocryptfs](https://nuetzlich.net/gocryptfs/) vault |
 | Folders that already have files | Yes, any size, instantly | No: only new or empty folders |
@@ -76,8 +77,7 @@ While locked, a folder of either type can be **Not shown** (it disappears from i
   - when you leave the workspace where you opened it;
   - when the screen locks;
   - after a maximum time open (off by default), with a button to postpone it 15 minutes.
-- **It tells you what is using a folder.** Locking by hand lists the programs that have files open and
-  lets you decide.
+- **It tells you what is using a folder.** Locking by hand first lists the programs with its files open.
 - **Double-click to open.** A *Shown, empty* folder opened in Files (Nautilus) brings up a small card
   asking for its password.
 - **Works on external disks.** A folder on a connected disk stays on that disk.

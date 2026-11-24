@@ -242,7 +242,8 @@ Item {
       width: parent.width
       wrapMode: Text.Wrap
       textFormat: Text.PlainText
-      text: form.editing ? form.t("form.editHint") : form.readding ? form.t("form.readdHint") : form.t("form.createHint")
+      text: form.editing ? form.t("form.editHint") : form.readding ? form.t("form.readdHint")
+        : form.t(form.kind === "encrypt" ? "form.createHintEncrypt" : "form.createHint")
       color: form.win.mutedFg
       font.family: form.win.fontFamily
       font.pixelSize: Style.font.caption
