@@ -84,7 +84,7 @@ FocusScope {
       placeholder: auth.busy ? gate.t("gate.busy") : gate.t("gate.placeholder")
       busy: auth.busy || gate.waitSeconds > 0
       onSubmitted: function(password) { auth.submit(password) }
-      onEscaped: gate.win.visible = false
+      onEscaped: gate.win.dismiss()
     }
     Text {
       width: parent.width

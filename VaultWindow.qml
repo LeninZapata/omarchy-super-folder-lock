@@ -26,6 +26,10 @@ FloatingWindow {
   readonly property string fontFamily: Style.font.menuFamily
   readonly property int margin: Style.spacing.panelPadding
 
+  // Cerrar SIEMPRE por el servicio: escribir `visible = false` aquí rompe el enlace
+  // `visible: root.windowOpen` y la ventana no volvía a abrirse hasta reiniciar el shell.
+  function dismiss() { if (service) service.closeWindow() }
+
   // ------------------------------------------------------------------ estado
   readonly property var folders: service ? service.folders : []
   property int cursor: 0
@@ -257,7 +261,7 @@ FloatingWindow {
           : useRecovery ? win.t("unlock.recoveryPlaceholder") : win.t("unlock.placeholder")
         busy: !!win.service && win.service.busyId !== ""
         onSubmitted: function(password) { win.service.unlock(win.service.cardId, password, useRecovery) }
-        onEscaped: win.visible = false
+        onEscaped: win.dismiss()
       }
       Text {
         anchors.horizontalCenter: parent.horizontalCenter
@@ -318,7 +322,7 @@ FloatingWindow {
       var f = win.current()
       if (event.key === Qt.Key_Escape) {
         if (win.expandedId !== "") win.collapse()
-        else win.visible = false
+        else win.dismiss()
       } else if (event.key === Qt.Key_Down) {
         win.cursor = Math.min(win.folders.length - 1, win.cursor + 1)
       } else if (event.key === Qt.Key_Up) {
