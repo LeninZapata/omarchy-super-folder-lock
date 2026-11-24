@@ -8,6 +8,7 @@
 - [delete] "Remove from the list", which left a folder locked without showing it anywhere. An entry can only be removed alone when its files no longer exist
 - [update] Add back finds the folder by its password, so with several folders outside the list any of them can be added back (before, only the first one)
 - [update] Clearer rule names: "No keyboard or mouse for" (was "Computer idle") and "Show the folder after unlocking it" (was "Open in file manager"), which now has its own "When opening" group
+- [update] New marketplace preview: a folder with its photos and the same folder locked
 - [update] The new folder form explains what each lock type is for, and why Encrypt needs a new or empty folder
 - [fix] The hint text of the password fields is readable in every theme: it takes the theme's muted color or a softened text color, whichever reads better
 - [fix] The window opens again after closing it with Esc
