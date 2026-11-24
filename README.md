@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/hero.jpg" alt="The same folder three times: open with its photos, locked (it looks empty and a card asks for its password), and open again with everything in it" width="900"></p>
+
 # Super Folder Lock
 
 Folders with a password for the Omarchy shell. Lock a folder and it leaves its place (or stays there,
@@ -17,20 +19,32 @@ external disks, and a window that asks for your system password before it lists 
 Nothing is copied: the folder is moved out of sight on the same disk, so it takes the same instant with
 ten files or with a hundred thousand.
 
+![A folder with photos is chosen, given a password, and disappears from its place](docs/demo/hide.gif)
+
 **Type its password and it is back.** The window asks for your system password before it lists anything;
 then each folder opens with its own. Opening it shows it in Files, where it was, with everything in it.
+
+![The system password opens the window, the folder password opens the folder, and Files shows its photos](docs/demo/unlock.gif)
 
 **Or leave it in sight, empty.** A folder set to *Shown, empty* stays in its place with nothing inside.
 Double-click it in Files and a small card asks for its password.
 
+![A locked folder stays in place but empty; a double-click asks for its password and its files appear](docs/demo/visible.gif)
+
 **It locks itself.** Leave the workspace, lock the screen or walk away from the keyboard, and the open
 folders lock again. Each rule can be changed for one folder or for all of them.
+
+![With a folder open and its photos in a viewer, leaving the workspace locks it: the folder is gone and the next photo does not load](docs/demo/autolock.gif)
 
 **Encrypt what must stay safe.** For a new or empty folder, *Encrypt* stores what you put inside in a
 gocryptfs vault, which only its password opens, on any computer. It hands you a recovery key once.
 
+![An encrypted folder is created, its recovery key is shown, and on the disk its files have unreadable names](docs/demo/encrypt.gif)
+
 **Change your mind whenever you want.** *Remove protection* gives you back a normal folder, with every
 file in it. *Remove from the list* only forgets it: it stays locked until you add it back.
+
+![Remove protection asks for the password and the folder is a normal one again](docs/demo/remove.gif)
 
 ## Two lock types
 
@@ -46,7 +60,11 @@ file in it. *Remove from the list* only forgets it: it stays locked until you ad
 While locked, a folder of either type can be **Not shown** (it disappears from its place) or
 **Shown, empty** (it stays there with nothing inside).
 
+<p align="center"><img src="docs/screenshots/form.png" alt="The new folder form: folder, lock type, how it looks when locked, password and automatic locking rules" width="640"></p>
+
 ## What it does
+
+<p align="center"><img src="docs/screenshots/list.png" alt="The list of protected folders: hidden, visible, encrypted, and one of them open" width="640"></p>
 
 - **Nothing is listed until you prove it is you.** The window asks for your system password (through
   PAM, the same check as Omarchy's lock screen). Until then it loads no names and no paths. It asks
@@ -125,21 +143,15 @@ Double-click to open works with Files (Nautilus).
 3. Pick the lock type, how it looks when locked, and a password.
 4. With *Encrypt*, save the recovery key: it is shown only once and stored nowhere.
 
-### Keys
-
-| Key | |
-|---|---|
-| <kbd>↑</kbd> <kbd>↓</kbd> | choose a folder |
-| <kbd>Enter</kbd> | open it, or view it in Files if it is open |
-| <kbd>l</kbd> / <kbd>L</kbd> | lock it / lock all |
-| <kbd>n</kbd> | new folder |
-| <kbd>e</kbd> / <kbd>c</kbd> | edit / change its password |
-| <kbd>,</kbd> | settings |
-| <kbd>Esc</kbd> | back |
+**Keys:** <kbd>↑</kbd> <kbd>↓</kbd> choose a folder · <kbd>Enter</kbd> open or view · <kbd>l</kbd> lock ·
+<kbd>L</kbd> lock all · <kbd>n</kbd> new · <kbd>e</kbd> edit · <kbd>c</kbd> password · <kbd>,</kbd> settings ·
+<kbd>Esc</kbd> back.
 
 ## Settings
 
 The rules apply to every folder left on **Default**:
+
+<p align="center"><img src="docs/screenshots/settings.png" alt="The settings page with the default rules" width="640"></p>
 
 | Setting | Default | |
 |---|---|---|
