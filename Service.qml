@@ -54,8 +54,10 @@ Item {
   // de org.quickshell, no el título). Se registra con `hyprctl eval` en cada open: un recargo
   // de Hyprland la borra.
   // no_screen_share solo si Lenin lo activa en ⚙ (B7): también deja en negro a grim.
+  // Se abre siempre en la puerta (o la tarjeta), que es pequeña: el tamaño va en la regla para
+  // que nazca así y no se vea grande un instante.
   readonly property string windowRuleLua: 'local m = { title = "^Super Folder Lock$" } '
-    + 'local r = { name = "super-folder-lock-window", float = true, center = true, ["hyprbars:no_bar"] = true, '
+    + 'local r = { name = "super-folder-lock-window", float = true, center = true, size = { 560, 500 }, ["hyprbars:no_bar"] = true, '
     + 'no_screen_share = ' + (settings.hideOnShare ? "true" : "false") + ' } '
     + 'if o and o.window then o.window(m, r) else r.match = m hl.window_rule(r) end'
 

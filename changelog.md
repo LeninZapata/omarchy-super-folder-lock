@@ -10,6 +10,7 @@
 - [update] Clearer rule names: "No keyboard or mouse for" (was "Computer idle") and "Show the folder after unlocking it" (was "Open in file manager"), which now has its own "When opening" group
 - [update] New marketplace preview: a folder with its photos and the same folder locked
 - [update] The new folder form explains what each lock type is for, and why Encrypt needs a new or empty folder
+- [fix] The window opens small at the password prompt and grows to the list once it is passed
 - [fix] The hint text of the password fields is readable in every theme: it takes the theme's muted color or a softened text color, whichever reads better
 - [fix] The window opens again after closing it with Esc
 - [fix] The shortcut never takes over or releases a key that something else uses in any Hyprland submap; if Hyprland's bind list can't be read, nothing is touched

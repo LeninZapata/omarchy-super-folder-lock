@@ -191,6 +191,7 @@ FloatingWindow {
   onVisibleChanged: {
     if (!visible) { expandedId = ""; page = "list"; recoveryKey = ""; gateView.reset(); cardField.clear(); cardField.useRecovery = false; return }
     cursor = 0
+    recenterTimer.restart()   // por si la regla no se aplicó: la puerta siempre a su tamaño
     Qt.callLater(function() { if (win.carded) cardField.forceActiveFocus(); else if (win.gated) gateView.focusField(); else keys.forceActiveFocus() })
   }
 
