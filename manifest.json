@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "leninzapata.super-folder-lock",
+  "name": "Super Folder Lock",
+  "version": "0.1.0",
+  "author": "leninzapata",
+  "license": "MIT",
+  "description": "Encrypted folders (gocryptfs) behind your password: hidden while locked, and locked again automatically when you leave the computer or the workspace",
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Super Folder Lock",
+    "description": "A neutral icon that opens your protected folders (behind your password)",
+    "category": "System",
+    "allowMultiple": false
+  }
+}
