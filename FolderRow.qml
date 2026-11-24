@@ -30,10 +30,10 @@ Rectangle {
   readonly property var apps: opened && service && service.holders[modelData.id] ? service.holders[modelData.id] : []
   readonly property int secondsLeft: opened && service ? service.closeIn(modelData.id) : -1
   property bool confirmLock: false
-  // ⋯ → olvidar del listado · quitar protección (los archivos se quedan; pide la clave)
-  property bool moreOpen: false
+  // Quitar protección: vuelve a ser una carpeta normal y sale de la lista (pide la clave).
   property bool confirmUnprotect: false
-  property bool confirmForget: false
+  // Sus archivos ya no existen: no hay nada que devolver, solo queda quitar la entrada.
+  readonly property bool gone: error === "folder.missing" || error === "vault.missing"
   readonly property bool encrypted: modelData.type !== "hide"
   readonly property bool unprotecting: !!service && service.unprotectId === modelData.id
   function requestLock() {
@@ -54,12 +54,12 @@ Rectangle {
     if (unlocking) Qt.callLater(function() { unlockField.forceActiveFocus() })
     else if (changing) Qt.callLater(function() { oldField.forceActiveFocus() })
   }
-  onExpandedChanged: { notice = ""; useRecovery = false; confirmLock = false; moreOpen = false; confirmUnprotect = false; confirmForget = false; if (expanded) focusFirst() }
+  onExpandedChanged: { notice = ""; useRecovery = false; confirmLock = false; confirmUnprotect = false; if (expanded) focusFirst() }
   onUnlockingChanged: if (unlocking) focusFirst()
   onChangingChanged: if (changing) focusFirst()
 
   function submitUnprotect(password) {
-    service.unprotect(modelData.id, password, function(r) { if (r.ok && row) { row.confirmUnprotect = false; row.moreOpen = false } })
+    service.unprotect(modelData.id, password, function(r) { if (r.ok && row) row.confirmUnprotect = false })
   }
 
   function submitPasswd() {
@@ -71,53 +71,6 @@ Rectangle {
     service.changeKey(modelData.id, o, n, function(r) {
       if (r.ok) { row.win.collapse(); row.notice = row.win.t("passwd.done") }
     })
-  }
-
-  component ActionCard: Rectangle {
-    id: card
-    property string title: ""
-    property string description: ""
-    readonly property bool usable: !row.opened && !row.unprotecting
-    signal activated()
-    implicitHeight: cardText.implicitHeight + Style.space(20)
-    radius: Style.cornerRadius
-    color: cardMouse.containsMouse && usable ? Util.alpha(row.win.fg, 0.14) : Util.alpha(row.win.fg, 0.05)
-    border.width: Math.max(1, Style.normalBorderWidth)
-    border.color: cardMouse.containsMouse && usable ? row.win.accent : Util.alpha(row.win.fg, 0.28)
-    opacity: usable ? 1 : 0.5
-    Column {
-      id: cardText
-      x: Style.space(12)
-      y: Style.space(10)
-      width: card.width - Style.space(24)
-      spacing: Style.space(4)
-      Text {
-        width: parent.width
-        wrapMode: Text.Wrap
-        textFormat: Text.PlainText
-        text: card.title
-        color: row.win.fg
-        font.family: row.win.fontFamily
-        font.pixelSize: Style.font.body
-        font.weight: Font.DemiBold
-      }
-      Text {
-        width: parent.width
-        wrapMode: Text.Wrap
-        textFormat: Text.PlainText
-        text: row.opened ? row.win.t("more.lockFirst") : card.description
-        color: row.win.mutedFg
-        font.family: row.win.fontFamily
-        font.pixelSize: Style.font.caption
-      }
-    }
-    MouseArea {
-      id: cardMouse
-      anchors.fill: parent
-      hoverEnabled: true
-      cursorShape: card.usable ? Qt.PointingHandCursor : Qt.ArrowCursor
-      onClicked: if (card.usable) card.activated()
-    }
   }
 
   MouseArea {
@@ -231,12 +184,16 @@ Rectangle {
           onClicked: { row.win.cursor = row.index; row.win.expand(row.modelData.id, "passwd") }
         }
         Button {
-          text: "󰇘"
-          tooltipText: row.win.t("action.more")
+          text: "󰦞"
+          tooltipText: row.win.t("more.unprotect")
           bordered: true
-          selected: row.moreOpen
+          selected: row.confirmUnprotect
           fontFamily: row.win.fontFamily
-          onClicked: { row.win.cursor = row.index; row.moreOpen = !row.moreOpen; row.confirmUnprotect = false; row.confirmForget = false }
+          onClicked: {
+            row.win.cursor = row.index
+            row.confirmUnprotect = !row.confirmUnprotect
+            if (row.confirmUnprotect && !row.opened) Qt.callLater(function() { unprotectField.forceActiveFocus() })
+          }
         }
         Button {
           text: "󰏫"
@@ -276,56 +233,7 @@ Rectangle {
       Button { text: row.win.t("form.cancel"); bordered: true; fontFamily: row.win.fontFamily; onClicked: row.confirmLock = false }
     }
 
-    // ---- ⋯ más: dos botones anchos, cada uno explica dentro lo que hace
-    Row {
-      id: moreCards
-      visible: row.moreOpen && !row.confirmUnprotect && !row.confirmForget
-      width: parent.width
-      spacing: Style.space(8)
-      readonly property real cardWidth: (width - spacing) / 2
-      readonly property real cardHeight: Math.max(forgetCard.implicitHeight, unprotectCard.implicitHeight)
-      ActionCard {
-        id: forgetCard
-        width: moreCards.cardWidth
-        height: moreCards.cardHeight
-        title: "󰈉  " + row.win.t("more.forget")
-        description: row.win.t(row.encrypted ? "more.forgetDesc" : "more.forgetDescHide")
-        onActivated: row.confirmForget = true
-      }
-      ActionCard {
-        id: unprotectCard
-        width: moreCards.cardWidth
-        height: moreCards.cardHeight
-        title: "󰿆  " + row.win.t("more.unprotect")
-        description: row.win.t(row.encrypted ? "more.unprotectDesc" : "more.unprotectDescHide")
-        onActivated: { row.confirmUnprotect = true; Qt.callLater(function() { unprotectField.forceActiveFocus() }) }
-      }
-    }
-    Column {
-      visible: row.confirmForget
-      width: parent.width
-      spacing: Style.space(6)
-      Text {
-        width: parent.width
-        wrapMode: Text.Wrap
-        textFormat: Text.PlainText
-        text: row.win.t(row.encrypted ? "forget.confirm" : "forget.confirmHide").arg(row.modelData.name)
-        color: row.win.fg
-        font.family: row.win.fontFamily
-        font.pixelSize: Style.font.caption
-      }
-      Row {
-        spacing: Style.space(8)
-        Button {
-          text: row.win.t("more.forget")
-          bordered: true
-          selected: true
-          fontFamily: row.win.fontFamily
-          onClicked: row.service.forgetFolder(row.modelData.id, function(r) { if (row) { row.confirmForget = false; row.moreOpen = false } })
-        }
-        Button { text: row.win.t("form.cancel"); bordered: true; fontFamily: row.win.fontFamily; onClicked: row.confirmForget = false }
-      }
-    }
+    // ---- quitar protección: la carpeta vuelve a su sitio y sale de la lista
     Column {
       visible: row.confirmUnprotect
       width: parent.width
@@ -336,13 +244,14 @@ Rectangle {
         wrapMode: Text.Wrap
         textFormat: Text.PlainText
         text: row.unprotecting ? row.win.t("unprotect.working")
+          : row.opened ? row.win.t("more.lockFirst")
           : row.win.t(row.encrypted ? "unprotect.explain" : "unprotect.explainHide").arg(row.win.shortPath(row.modelData.path))
         color: row.win.fg
         font.family: row.win.fontFamily
         font.pixelSize: Style.font.caption
       }
       Row {
-        visible: !row.unprotecting
+        visible: !row.unprotecting && !row.opened
         spacing: Style.space(8)
         PasswordField {
           id: unprotectField
@@ -367,6 +276,13 @@ Rectangle {
           }
         }
         Button { text: row.win.t("form.cancel"); bordered: true; fontFamily: row.win.fontFamily; anchors.verticalCenter: parent.verticalCenter; onClicked: { unprotectField.clear(); row.confirmUnprotect = false } }
+      }
+      Button {
+        visible: row.gone && !row.unprotecting && !row.opened
+        text: row.win.t("forget.gone")
+        bordered: true
+        fontFamily: row.win.fontFamily
+        onClicked: row.service.forgetFolder(row.modelData.id, function(r) { if (r.ok && row) row.confirmUnprotect = false })
       }
     }
 

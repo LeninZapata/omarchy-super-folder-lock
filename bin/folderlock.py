@@ -18,9 +18,9 @@ Uso (siempre con `python3 -I`):  folderlock.py <subcomando> [id]
   unprotect <id>  clave por stdin → saca los archivos a una carpeta normal en su ruta, los
                   compara uno a uno con los cifrados y SOLO ENTONCES quita la bóveda
   orphans         ids de bóvedas en vaults/ que no están en el registro (sin nombres)
-  readd <id>      stdin: línea 1 = clave, línea 2 = JSON {path, name, mode, rules} → la clave
-                  se comprueba (gocryptfs-xray) y la bóveda vuelve al registro
-  forget <id>     quita una carpeta BLOQUEADA del registro (la bóveda queda: «sin registrar»)
+  readd <id|any>  stdin: línea 1 = clave, línea 2 = JSON {path, name, mode, rules} → la clave
+                  se comprueba (con «any», dice cuál de las sin registrar es) y vuelve al registro
+  forget <id>     quita del registro una entrada cuyos archivos YA NO EXISTEN (nunca una con contenido)
   destroy <id>    bloquea si hace falta y BORRA la bóveda y su entrada (sin vuelta atrás)
   info <id>       solo el nombre (la tarjeta del modo visible; no carga el listado)
   init            stdin: línea 1 = clave, línea 2 = JSON {path, name, rules} → crea
@@ -908,22 +908,33 @@ def cmd_orphans(_args):
     return {"ids": sorted(ids), "disks": ids}
 
 
-def hide_readd(fid, base):
-    key = sys.stdin.readline().rstrip("\n")
-    try:
-        meta = json.loads(sys.stdin.readline() or "{}")
-        with open(os.path.join(base, fid + ".json"), encoding="utf-8") as fh:
-            auth = json.load(fh)["auth"]
-    except (OSError, ValueError, KeyError, TypeError):
-        raise Fail("readd.failed")
-    reg = read_registry()
-    if fid in reg["folders"]:
-        raise Fail("path.taken")
-    if not key_ok(auth, key):
-        raise Fail("key.wrong")
-    path = validate_new_path(meta.get("path"), reg)
+def readd_key_ok(fid, key):
+    """¿Abre esta clave esa carpeta? Sin montar ni mover nada."""
+    for root in [data_dir()] + [os.path.join(r, DISK_DIR) for r in mounted_disks()]:
+        base = os.path.join(root, "locked")
+        if hide_locked(os.path.join(base, fid)):
+            try:
+                with open(os.path.join(base, fid + ".json"), encoding="utf-8") as fh:
+                    auth = json.load(fh)["auth"]
+            except (OSError, ValueError, KeyError, TypeError):
+                raise Fail("readd.failed")
+            return key_ok(auth, key)
+    conf = os.path.join(vault_dir(fid), "gocryptfs.conf")
+    if not os.path.isfile(conf):
+        raise Fail("folder.unknown")
+    if not shutil.which("gocryptfs-xray"):
+        raise Fail("gocryptfs.missing")
+    # xray solo descifra la clave maestra con la clave: no hace falta montar.
+    x = subprocess.run(["gocryptfs-xray", "-dumpmasterkey", conf], input=(key + "\n").encode(),
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return x.returncode == 0
+
+
+def hide_readd(fid, base, path, meta, reg):
     if hide_base(path) != base:
         raise Fail("hide.otherDisk")     # volver a otro disco sería copiar
+    with open(os.path.join(base, fid + ".json"), encoding="utf-8") as fh:
+        auth = json.load(fh)["auth"]
     f = dict({"name": str(meta.get("name") or "").strip()[:60] or os.path.basename(path), "path": path, "type": "hide",
               "mode": "visible" if meta.get("mode") == "visible" else "hidden",
               "createdAt": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "auth": auth}, **clean_rules(meta.get("rules")))
@@ -934,30 +945,42 @@ def hide_readd(fid, base):
 
 
 def cmd_readd(args):
-    fid = args[0] if args else ""
-    if ID_RE.match(fid):
-        for root in [data_dir()] + [os.path.join(r, DISK_DIR) for r in mounted_disks()]:
-            if hide_locked(os.path.join(root, "locked", fid)):
-                return hide_readd(fid, os.path.join(root, "locked"))
-    if not shutil.which("gocryptfs-xray"):
-        raise Fail("gocryptfs.missing")
-    if not ID_RE.match(fid) or not os.path.isfile(os.path.join(vault_dir(fid), "gocryptfs.conf")):
+    """Sin id («any»): la clave dice cuál es. De una carpeta fuera del listado no se sabe el nombre,
+    así que pedir que se elija una de varias no serviría de nada."""
+    want = args[0] if args else ""
+    if want != "any" and not ID_RE.match(want):
         raise Fail("folder.unknown")
     key = sys.stdin.readline().rstrip("\n")
     try:
         meta = json.loads(sys.stdin.readline() or "{}")
     except ValueError:
-        raise Fail("init.failed")
+        raise Fail("readd.failed")
+    if not key:
+        raise Fail("key.empty")
     reg = read_registry()
-    if fid in reg["folders"]:
+    if want in reg["folders"]:
         raise Fail("path.taken")
-    # La clave se comprueba sin montar: xray solo descifra la clave maestra con ella.
-    x = subprocess.run(["gocryptfs-xray", "-dumpmasterkey", os.path.join(vault_dir(fid), "gocryptfs.conf")],
-                       input=(key + "\n").encode(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    matches, problems = [], []
+    for cand in (cmd_orphans([])["ids"] if want == "any" else [want]):
+        try:
+            (matches if readd_key_ok(cand, key) else problems).append(cand)
+        except Fail as e:        # una ilegible no impide probar las demás
+            problems.append(e)
     key = ""
-    if x.returncode != 0:
-        raise Fail("key.wrong")
+    if not matches:
+        bad = [e.key for e in problems if isinstance(e, Fail)]
+        # Sin gocryptfs no se pudo probar todo: decir «clave incorrecta» sería falso.
+        raise Fail("gocryptfs.missing" if "gocryptfs.missing" in bad else bad[0] if bad and len(bad) == len(problems) else "key.wrong")
     path = validate_new_path(meta.get("path"), reg)
+    bases = {}                   # las escondidas, y dónde están guardadas
+    for root in [data_dir()] + [os.path.join(r, DISK_DIR) for r in mounted_disks()]:
+        for m in matches:
+            if hide_locked(os.path.join(root, "locked", m)):
+                bases[m] = os.path.join(root, "locked")
+    # Varias con la misma clave: la que pueda ir a esa ruta (una escondida no cambia de disco).
+    fid = next((m for m in matches if m not in bases or bases[m] == hide_base(path)), matches[0])
+    if fid in bases:
+        return hide_readd(fid, bases[fid], path, meta, reg)
     name = str(meta.get("name") or "").strip()[:60] or os.path.basename(path)
     mode = "visible" if meta.get("mode") == "visible" else "hidden"
     if mode == "visible":
@@ -975,14 +998,22 @@ def cmd_readd(args):
 
 
 def cmd_forget(args):
+    """Solo para una entrada cuyos archivos ya no existen: una carpeta con contenido nunca sale de
+    la lista quedándose bloqueada (para eso está `unprotect`, que la devuelve)."""
     fid = args[0] if args else ""
     f = get_folder(fid)
     if is_open(fid, f):
         raise Fail("folder.isOpen")
-    if is_hide(f) and not hide_locked(hide_store(fid, f)):
-        # Ni guardada ni a la vista (disco sin conectar): olvidarla perdería su clave.
-        if hide_missing(fid, f) == "disk.missing":
-            raise Fail("disk.missing")
+    if is_hide(f):
+        why = "" if hide_locked(hide_store(fid, f)) else hide_missing(fid, f)
+    else:
+        try:
+            require_vault(fid)
+            why = ""
+        except Fail as e:
+            why = e.key
+    if why not in ("folder.missing", "vault.missing"):
+        raise Fail(why or "forget.exists")
     reg = read_registry()
     del reg["folders"][fid]
     write_registry(reg)

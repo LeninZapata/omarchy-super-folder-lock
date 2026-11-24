@@ -347,6 +347,43 @@ class HelperTest(unittest.TestCase):
             sleeper.kill(); sleeper.wait()
         self.assertTrue(self.sb.helper("lock", FID)["ok"])
 
+    def lose_registry(self):
+        with open(os.path.join(self.sb.data, "folders.sfldb"), "w") as f:
+            f.write("SFLDB 1\n" + json.dumps({"schemaVersion": 1, "folders": {}}))
+
+    def test_readd_any(self):
+        """Varias fuera del listado: la clave dice cuál es cada una, en cualquier orden."""
+        paths, ids = {}, {}
+        for n, kind in (("uno", "hide"), ("dos", "hide"), ("tres", "encrypt")):
+            paths[n] = os.path.join(self.sb.home, n)
+            if kind == "hide":
+                os.makedirs(paths[n])
+                with open(os.path.join(paths[n], "f"), "w") as fh:
+                    fh.write(n)
+            r = self.sb.helper("init", stdin="clave-" + n + "\n" + json.dumps({"path": paths[n], "type": kind}) + "\n")
+            self.assertTrue(r["ok"], r)
+            ids[n] = r["data"]["id"]
+            self.sb.helper("lock", ids[n])
+        self.lose_registry()
+        self.assertEqual(self.sb.helper("orphans")["data"]["ids"], sorted(ids.values()))
+        back = lambda k, n: self.sb.helper("readd", "any", stdin=k + "\n" + json.dumps({"path": paths[n]}) + "\n")
+        self.assertEqual(back("ninguna", "uno")["error"], "key.wrong")
+        self.assertEqual(back("", "uno")["error"], "key.empty")
+        self.assertEqual(self.sb.helper("readd", "../x", stdin="a\n{}\n")["error"], "folder.unknown")
+        # una ilegible no estorba a las demás
+        os.rename(os.path.join(self.sb.data, "locked", ids["uno"] + ".json"), os.path.join(self.sb.base, "guardado.json"))
+        for n in sorted(ids, key=lambda n: ids[n], reverse=True):
+            if n != "uno":
+                r = back("clave-" + n, n)
+                self.assertEqual((r["ok"], r["data"]["id"]), (True, ids[n]), r)
+        self.assertEqual(back("clave-uno", "uno")["error"], "readd.failed")
+        os.rename(os.path.join(self.sb.base, "guardado.json"), os.path.join(self.sb.data, "locked", ids["uno"] + ".json"))
+        self.assertEqual(back("clave-uno", "uno")["data"]["id"], ids["uno"])
+        for n in ("uno", "dos"):
+            self.assertTrue(self.sb.helper("unprotect", ids[n], stdin="clave-" + n + "\n")["ok"])
+            with open(os.path.join(paths[n], "f")) as fh:
+                self.assertEqual(fh.read(), n)
+
     def test_orphans_readd_forget_destroy(self):
         path = self.sb.add_folder()
         with open(os.path.join(self.sb.data, "folders.sfldb"), "w") as f:
@@ -359,15 +396,21 @@ class HelperTest(unittest.TestCase):
         self.assertTrue(r["ok"], r)
         self.assertEqual(self.sb.helper("orphans")["data"]["ids"], [])
         self.assertTrue(os.path.isdir(path))                                     # visible
-        # olvidar: abierta no; bloqueada sí → vuelve a «sin registrar»; la bóveda sigue
+        # olvidar: nunca una con contenido, ni abierta ni bloqueada; sí si ya no queda nada
         self.assertTrue(self.sb.helper("unlock", FID, stdin=KEY + "\n")["ok"])
         self.assertEqual(self.sb.helper("forget", FID)["error"], "folder.isOpen")
         self.assertTrue(self.sb.helper("lock", FID)["ok"])
+        self.assertEqual(self.sb.helper("forget", FID)["error"], "forget.exists")
+        self.assertEqual(len(self.sb.helper("list")["data"]["folders"]), 1)
+        vault = os.path.join(self.sb.data, "vaults", FID)
+        os.rename(vault, vault + ".away")
+        self.assertEqual(self.sb.helper("unlock", FID, stdin=KEY + "\n")["error"], "vault.missing")
         self.assertTrue(self.sb.helper("forget", FID)["ok"])
-        self.assertEqual(self.sb.helper("orphans")["data"]["ids"], [FID])
         self.assertFalse(os.path.exists(path))
+        os.rename(vault + ".away", vault)
+        self.assertEqual(self.sb.helper("orphans")["data"]["ids"], [FID])
         # borrar: también una huérfana; abierta se bloquea antes
-        self.assertTrue(self.sb.helper("readd", FID, stdin=KEY + "\n" + json.dumps(meta) + "\n")["ok"])
+        self.assertTrue(self.sb.helper("readd", "any", stdin=KEY + "\n" + json.dumps(meta) + "\n")["ok"])
         self.assertTrue(self.sb.helper("unlock", FID, stdin=KEY + "\n")["ok"])
         self.assertTrue(self.sb.helper("destroy", FID)["ok"])
         self.assertFalse(self.sb.mounted(path))
@@ -414,7 +457,8 @@ class HelperTest(unittest.TestCase):
         self.assertEqual(self.sb.helper("forget", hid)["error"], "disk.missing")
         self.assertTrue(self.sb.helper("lockall")["ok"])
         os.rename(disk + ".off", disk)
-        self.assertTrue(self.sb.helper("forget", hid)["ok"])
+        self.assertEqual(self.sb.helper("forget", hid)["error"], "forget.exists")
+        self.lose_registry()
         self.assertEqual(self.sb.helper("orphans")["data"]["disks"], {hid: "Box"})
         back = lambda p: self.sb.helper("readd", hid, stdin=KEY + "\n" + json.dumps({"path": p}) + "\n")
         self.assertEqual(back(os.path.join(self.sb.home, "otra"))["error"], "hide.otherDisk")
@@ -450,9 +494,10 @@ class HelperTest(unittest.TestCase):
             self.assertEqual(self.sb.helper(*cmd, stdin=si)["error"], "disk.missing", cmd)
         self.assertFalse(os.path.exists(disk))                                        # nada escrito en el hueco
         self.assertEqual(len(self.sb.helper("list")["data"]["folders"]), 1)
+        self.assertEqual(self.sb.helper("forget", fid)["error"], "disk.missing")
         os.rename(disk + ".off", disk)
         # registro perdido: se encuentra en el disco y vuelve
-        self.assertTrue(self.sb.helper("forget", fid)["ok"])
+        self.lose_registry()
         self.assertEqual(self.sb.helper("orphans")["data"], {"ids": [fid], "disks": {fid: "Box"}})
         self.assertTrue(self.sb.helper("readd", fid, stdin=KEY + "\n" + json.dumps({"path": path}) + "\n")["ok"])
         self.assertTrue(self.sb.helper("unlock", fid, stdin=KEY + "\n")["ok"])
@@ -739,10 +784,14 @@ class HelperTest(unittest.TestCase):
         self.assertTrue(self.sb.helper("readd", fid, stdin=si(KEY))["ok"])
         self.assertTrue(self.sb.helper("unlock", fid, stdin=KEY + "\n")["ok"])
         self.assertEqual(self.snap(path), before)
-        # olvidar y volver a agregar
-        self.assertTrue(self.sb.helper("lock", fid)["ok"]); self.assertTrue(self.sb.helper("forget", fid)["ok"])
-        self.assertEqual(self.sb.helper("orphans")["data"]["ids"], [fid])
-        self.assertTrue(self.sb.helper("readd", fid, stdin=si(KEY))["ok"])
+        # con contenido no se olvida; movida fuera de la ventana, sí
+        self.assertTrue(self.sb.helper("lock", fid)["ok"])
+        self.assertEqual(self.sb.helper("forget", fid)["error"], "forget.exists")
+        self.assertTrue(self.sb.helper("unlock", fid, stdin=KEY + "\n")["ok"])
+        os.rename(path, path + "-movida")
+        self.assertTrue(self.sb.helper("forget", fid)["ok"])
+        self.assertEqual(self.sb.helper("orphans")["data"]["ids"], [])
+        self.assertEqual(self.snap(path + "-movida"), before)
 
     def test_hide_never_copies(self):
         """Si moverla exigiera copiar (otro disco), se rechaza; y el contenido no pasa por shutil."""
@@ -772,7 +821,7 @@ class HelperTest(unittest.TestCase):
                 "for o,n in ((os,'rename'),(os,'replace'),(os,'mkdir'),(os,'rmdir'),(os,'chmod'),(os,'unlink'),(os,'makedirs'),(f,'write_registry'),(f,'write_atomic'),(f,'move_children')): w(o,n)")
         path = self.originals(); before = self.snap(path)
         kills = 0
-        for op in ("init", "unlock", "lock", "passwd", "unprotect", "forget"):
+        for op in ("init", "unlock", "lock", "passwd", "unprotect"):
             n = 0
             while True:
                 n += 1
@@ -793,7 +842,7 @@ class HelperTest(unittest.TestCase):
                 where = "%s paso %d" % (op, n)
                 self.assertTrue(self.sb.helper("lockall")["ok"], where)          # el siguiente arranque
                 folders = self.sb.helper("list")["data"]["folders"]
-                for o in self.sb.helper("orphans")["data"]["ids"]:                # olvidada: se recupera
+                for o in self.sb.helper("orphans")["data"]["ids"]:                # sin registrar: se recupera
                     self.assertTrue(self.sb.helper("readd", o, stdin=KEY + "\n" + json.dumps({"path": path}) + "\n")["ok"], where)
                 folders = self.sb.helper("list")["data"]["folders"]
                 if folders:

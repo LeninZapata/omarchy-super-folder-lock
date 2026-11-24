@@ -6,7 +6,7 @@ Folders with a password for the Omarchy shell. Lock a folder and it leaves its p
 empty); type its password to get it back. Walk away, switch workspace or lock the screen, and it locks
 again on its own.
 
-**Status: v0.1.0.** First version. Two lock types (Hide and Encrypt), automatic locking, folders on
+**Status: v0.2.0 (beta).** Two lock types (Hide and Encrypt), automatic locking, folders on
 external disks, and a window that asks for your system password before it lists anything.
 
 > **Read this first.** *Hide*, the default, keeps a folder away from people using your screen. It is
@@ -42,7 +42,7 @@ gocryptfs vault, which only its password opens, on any computer. It hands you a 
 ![An encrypted folder is created, its recovery key is shown, and on the disk its files have unreadable names](docs/demo/encrypt.gif)
 
 **Change your mind whenever you want.** *Remove protection* gives you back a normal folder, with every
-file in it. *Remove from the list* only forgets it: it stays locked until you add it back.
+file in it, and takes it off the list. No folder leaves the list while it is still locked.
 
 ![Remove protection asks for the password and the folder is a normal one again](docs/demo/remove.gif)
 
@@ -83,7 +83,7 @@ While locked, a folder of either type can be **Not shown** (it disappears from i
 - **Works on external disks.** A folder on a connected disk stays on that disk.
 - **Nothing is deleted.** *Remove protection* puts the files back in a normal folder: *Hide* moves the
   folder back as it was; *Encrypt* copies the files out, compares them byte by byte, and only then
-  removes the encryption. *Remove from the list* keeps the folder locked, and *Add back* returns it.
+  removes the encryption. If the list itself is lost, *Add back* finds each folder by its password.
 - **It cleans up traces.** Locking removes the thumbnails and the recent-files entries of that folder.
 - **Everything starts locked.** Whether a folder is open is never saved. The plugin locks every folder
   when it starts, and a small watchdog does it if the shell stops.
@@ -247,5 +247,4 @@ omarchy-shell leninzapata.super-folder-lock status    # JSON: how many are open;
 Tests: `tests/run.sh`; after editing, `omarchy restart shell`. [Changelog](changelog.md).
 
 ## License
-
 [MIT](LICENSE)

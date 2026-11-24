@@ -60,10 +60,9 @@ Item {
     Qt.callLater(function() { nameField.forceActiveFocus() })
   }
 
-  function loadReadd(id) {
+  function loadReadd() {
     reset()
     readding = true
-    editId = id
   }
 
   function reset() {
@@ -154,7 +153,7 @@ Item {
       busy = true
       var k = key1.value
       key1.clear()
-      win.submitReadd(editId, { path: targetPath(), rules: rules, mode: mode }, k, function(r) {
+      win.submitReadd({ path: targetPath(), rules: rules, mode: mode }, k, function(r) {
         form.busy = false
         if (!r.ok) form.error = "error." + r.error
       })

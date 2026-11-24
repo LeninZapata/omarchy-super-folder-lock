@@ -206,12 +206,14 @@ Item {
     if (f && isOpen(id)) Quickshell.execDetached(["xdg-open", f.path])
   }
 
-  // ---------------------------------------------------------------- sin registrar · olvidar · borrar (B6)
+  // ---------------------------------------------------------------- sin registrar · quitar protección (B6)
   property var orphanIds: []
   property var orphanDisks: ({})   // id -> nombre del disco externo, "" = interno
-  function readd(id, key, meta, cb) {
-    helper(["readd", id], key + "\n" + JSON.stringify(meta), function(r) { cb(r); root.refresh() })
+  // De una carpeta fuera del listado no se sabe el nombre: la clave dice cuál es.
+  function readd(key, meta, cb) {
+    helper(["readd", "any"], key + "\n" + JSON.stringify(meta), function(r) { cb(r); root.refresh() })
   }
+  // Solo si sus archivos ya no existen (lo exige el auxiliar).
   function forgetFolder(id, cb) {
     helper(["forget", id], "", function(r) { if (!r.ok) root.setRowError(id, r.error); cb(r); root.refresh() })
   }

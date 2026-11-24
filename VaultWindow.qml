@@ -84,14 +84,14 @@ FloatingWindow {
     return t(n === 1 ? "orphans.one" : "orphans.many").arg(n) + (names.length > 0 ? " (" + names.join(", ") + ")" : "")
   }
 
-  function openReadd(id) {
+  function openReadd() {
     expandedId = ""
     page = "readd"
-    form.loadReadd(id)
+    form.loadReadd()
   }
 
-  function submitReadd(id, meta, key, cb) {
-    service.readd(id, key, meta, function(r) {
+  function submitReadd(meta, key, cb) {
+    service.readd(key, meta, function(r) {
       cb(r)
       if (r.ok) win.backToList()
     })
@@ -473,7 +473,7 @@ FloatingWindow {
               width: parent.width
               wrapMode: Text.Wrap
               textFormat: Text.PlainText
-              text: win.t("orphans.hint")
+              text: win.t(win.service && win.service.orphanIds.length > 1 ? "orphans.hintMany" : "orphans.hint")
               color: win.mutedFg
               font.family: win.fontFamily
               font.pixelSize: Style.font.caption
@@ -486,7 +486,7 @@ FloatingWindow {
             text: win.t("orphans.readd")
             bordered: true
             fontFamily: win.fontFamily
-            onClicked: win.openReadd(win.service.orphanIds[0])
+            onClicked: win.openReadd()
           }
         }
       }
