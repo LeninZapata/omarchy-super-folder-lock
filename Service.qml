@@ -426,39 +426,40 @@ Item {
     Quickshell.execDetached(["omarchy-launch-floating-terminal-with-presentation", "omarchy pkg add gocryptfs"])
   }
 
-  // Atajo para abrir la ventana, en caliente. Si ya lo usa otra cosa, no se pisa: se avisa.
-  property string appliedShortcut: ""
+  // Atajo para abrir la ventana, en caliente. Si ya lo usa otra cosa, no se pisa: se avisa. Sin
+  // poder leer la lista de atajos no se toca nada y se reintenta.
+  property var appliedShortcuts: []
   property string shortcutConflict: ""
   function applyShortcut() { bindsProc.exec(["hyprctl", "binds", "-j"]) }
   Process {
     id: bindsProc
     stdout: StdioCollector {
       onStreamFinished: {
-        var binds = null
-        try { binds = JSON.parse(text) } catch (e) { binds = null }
-        var want = Shortcut.norm(root.settings.openShortcut) || ""
-        var clash = want !== "" && binds !== null && Shortcut.conflict(binds, want)
-        root.shortcutConflict = clash ? want : ""
-        var lua = Shortcut.lua(root.appliedShortcut, clash ? "" : want)
-        root.appliedShortcut = clash ? "" : want
-        if (lua.length > 0) Quickshell.execDetached(["hyprctl", "eval", lua])
+        var p = Shortcut.plan(root.settings.openShortcut, root.appliedShortcuts, Shortcut.owners(text))
+        root.appliedShortcuts = p.applied
+        if (p.retry) { shortcutRetry.restart(); return }
+        root.shortcutConflict = p.conflict
+        if (p.lua.length > 0) Quickshell.execDetached(["hyprctl", "eval", p.lua])
       }
     }
   }
+  Timer { id: shortcutRetry; interval: 3000; onTriggered: root.applyShortcut() }
   onSettingsChanged: {
     var want = Shortcut.norm(settings.openShortcut) || ""
-    if (want !== appliedShortcut || (want === "" && shortcutConflict !== "")) applyShortcut()
+    if (want !== (appliedShortcuts[0] || "") || (want === "" && shortcutConflict !== "")) applyShortcut()
   }
   // Una recarga de Hyprland borra lo puesto en caliente: el atajo se vuelve a poner.
   Connections {
     target: Hyprland
     function onRawEvent(event) {
-      if (event && event.name === "configreloaded") { root.appliedShortcut = ""; shortcutReload.restart() }
+      if (event && event.name === "configreloaded") { root.appliedShortcuts = []; shortcutReload.restart() }
     }
   }
   Timer { id: shortcutReload; interval: 300; onTriggered: root.applyShortcut() }
-  // Al descargar el plugin, el atajo se suelta.
-  Component.onDestruction: if (appliedShortcut !== "") Quickshell.execDetached(["hyprctl", "eval", Shortcut.lua(appliedShortcut, "")])
+  // Al descargar el plugin ya no da tiempo a leer la lista aquí: binds.py la lee y suelta el atajo
+  // solo si en esa tecla no hay nada más.
+  Component.onDestruction: if (appliedShortcuts.length > 0)
+    Quickshell.execDetached(["python3", "-I", String(Qt.resolvedUrl("bin/binds.py")).replace(/^file:\/\//, ""), "release"].concat(appliedShortcuts))
 
   // ---------------------------------------------------------------- tiempo máximo (B5)
   // Desde que se abrió; «Posponer» suma 15 min. Cada 5 s mientras alguna tenga la regla.
@@ -728,7 +729,7 @@ Item {
         lastVisibleRequest: root.lastVisibleRequest !== "",
         card: root.cardId !== "",
         gateTimeout: root.settings.gateTimeoutSeconds,
-        shortcut: root.appliedShortcut,
+        shortcut: root.appliedShortcuts[0] || "",
         shortcutConflict: root.shortcutConflict
       })
     }

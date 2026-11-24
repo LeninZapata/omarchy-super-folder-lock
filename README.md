@@ -239,11 +239,12 @@ omarchy-shell leninzapata.super-folder-lock status    # JSON: how many are open;
 ├── Watchdog.js           # locks everything if the shell stops
 ├── bin/folderlock.py     # the helper: the only one that writes the list and moves or mounts folders
 ├── bin/visiblewatch.py   # notices a double-click on a locked, shown folder
+├── bin/binds.py          # releases the shortcut, only where it is the plugin's
 ├── i18n/                 # en.json, es.json
 └── tests/                # python and node tests, in a sandbox with its own home
 ```
 
-Run the tests with `tests/run.sh`; after editing, reload with `omarchy restart shell`.
+Tests: `tests/run.sh`; after editing, `omarchy restart shell`. [Changelog](changelog.md).
 
 ## License
 

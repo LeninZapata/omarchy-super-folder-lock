@@ -19,36 +19,56 @@ function norm(chord) {
   return mods.concat([key]).join(" + ")
 }
 
-function mask(chord) {
-  var c = norm(chord)
-  if (!c) return -1
-  var parts = c.split(" + "), m = 0
-  for (var i = 0; i < parts.length - 1; i++) m += MASK[parts[i]]
-  return m
-}
-
-// ¿Ese atajo ya lo usa OTRA cosa? binds = salida de `hyprctl binds -j`.
-function conflict(binds, chord) {
-  var c = norm(chord)
-  if (!c || !binds) return false
-  var key = c.split(" + ").pop(), m = mask(c)
-  for (var i = 0; i < binds.length; i++) {
-    var b = binds[i]
-    if (b.submap || b.mouse) continue
-    if (b.modmask === m && String(b.key).toUpperCase() === key && b.description !== DESC) return true
+// `hyprctl binds -j` → { "SUPER + K": { own: n, foreign: n } }, contando TODOS los submaps:
+// hl.unbind quita la tecla de todos, así que un atajo ajeno en cualquiera la hace ajena. El dueño
+// se reconoce por la descripción (DESC). null si la lista no se pudo leer.
+function owners(text) {
+  var list
+  try { list = JSON.parse(text) } catch (e) { return null }
+  if (!Array.isArray(list)) return null
+  var map = {}
+  for (var i = 0; i < list.length; i++) {
+    var b = list[i]
+    if (!b || b.mouse) continue
+    var mods = []
+    for (var m in MASK) if ((Number(b.modmask) || 0) & MASK[m]) mods.push(m)
+    var key = String(b.key || "")
+    // Omarchy ata los números por código de tecla (code:10 = «1» … code:19 = «0»).
+    if (key === "" && b.keycode >= 10 && b.keycode <= 19) key = String((b.keycode - 9) % 10)
+    var c = norm(mods.concat([key]).join(" + "))
+    if (!c) continue
+    var e = map[c] || (map[c] = { own: 0, foreign: 0 })
+    if (b.description === DESC) e.own++
+    else e.foreign++
   }
-  return false
+  return map
 }
 
 function luaStr(s) { return "[[" + String(s).replace(/\]\]/g, "] ]") + "]]" }
 
-// Quita el anterior (si era nuestro) y pone el nuevo.
-function lua(previous, chord) {
-  var lines = []
-  var p = norm(previous), c = norm(chord)
-  if (p) lines.push("pcall(function() hl.unbind(" + luaStr(p) + ") end)")
-  if (c) lines.push("hl.bind(" + luaStr(c) + ", hl.dsp.exec_cmd(" + luaStr(CMD) + "), { description = " + luaStr(DESC) + " })")
-  return lines.join("; ")
+// Pone `chord` y suelta los `previous`, tocando solo teclas que son NUESTRAS y de nadie más
+// (`own` = owners(), leído justo antes). Sin lista no se toca nada y `retry` pide repetir.
+// Devuelve { lua, applied, conflict, retry }.
+function plan(chord, previous, own) {
+  var prev = (previous || []).map(norm).filter(function(x) { return x !== null })
+  var c = norm(chord)
+  if (!own) return { lua: "", applied: prev, conflict: "", retry: true }
+  var lines = [], applied = [], conflict = ""
+  for (var i = 0; i < prev.length; i++) {
+    var o = own[prev[i]]
+    if (prev[i] === c || !o || o.own === 0 || o.foreign > 0) continue
+    lines.push("pcall(function() hl.unbind(" + luaStr(prev[i]) + ") end)")
+  }
+  if (c) {
+    var w = own[c] || { own: 0, foreign: 0 }
+    if (w.foreign > 0) conflict = c
+    else {
+      if (w.own > 0) lines.push("pcall(function() hl.unbind(" + luaStr(c) + ") end)")
+      lines.push("hl.bind(" + luaStr(c) + ", hl.dsp.exec_cmd(" + luaStr(CMD) + "), { description = " + luaStr(DESC) + " })")
+      applied.push(c)
+    }
+  }
+  return { lua: lines.join("; "), applied: applied, conflict: conflict, retry: false }
 }
 
-if (typeof module !== "undefined") module.exports = { norm: norm, mask: mask, conflict: conflict, lua: lua, DESC: DESC }
+if (typeof module !== "undefined") module.exports = { norm: norm, owners: owners, plan: plan, DESC: DESC }
