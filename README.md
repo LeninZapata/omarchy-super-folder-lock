@@ -155,11 +155,11 @@ The rules apply to every folder left on **Default**:
 
 | Setting | Default | |
 |---|---|---|
-| Computer idle | On, 10 min | 1 min – 2 h |
+| No keyboard or mouse for | On, 10 min | 1 min – 2 h |
 | Leaving its workspace | On | |
 | Screen locked | On | |
 | Maximum time open | Off | 5 min – 24 h |
-| Open in file manager | On | shows the folder after opening it |
+| Show the folder after unlocking it | On | off: it unlocks, and the window stays open |
 | Ask for the password again after | 2 min | 30 s – 1 h |
 | Shortcut to open this window | None | press the keys; one already in use is never taken over |
 | Show icon in the bar | On | |

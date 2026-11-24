@@ -538,20 +538,20 @@ FloatingWindow {
               { key: "showOpenDot", label: "settings.showOpenDot", top: true },
               { key: "notifyAutoLock", label: "settings.notifyAutoLock", top: true },
               { key: "hideOnShare", label: "settings.hideOnShare", top: true },
-              { key: "idleLock", label: "rule.idle", first: true },
+              { key: "idleLock", label: "rule.idle", caption: "settings.defaultsCaption" },
               { key: "maxOpenLock", label: "rule.maxOpen" },
               { key: "workspaceLock", label: "rule.workspace" },
               { key: "screenLock", label: "rule.screen" },
-              { key: "openInFileManager", label: "rule.openFm" }
+              { key: "openInFileManager", label: "rule.openFm", caption: "form.whenOpening" }
             ]
             delegate: Column {
              required property var modelData
              spacing: Style.space(6)
              Text {
-               visible: !!modelData.first
+               visible: !!modelData.caption
                topPadding: Style.space(4)
                textFormat: Text.PlainText
-               text: win.t("settings.defaultsCaption")
+               text: modelData.caption ? win.t(modelData.caption) : ""
                color: win.mutedFg
                font.family: win.fontFamily
                font.pixelSize: Style.font.caption
@@ -597,6 +597,14 @@ FloatingWindow {
               }
              }
             }
+          }
+          Text {
+            topPadding: Style.space(4)
+            textFormat: Text.PlainText
+            text: win.t("settings.windowCaption")
+            color: win.mutedFg
+            font.family: win.fontFamily
+            font.pixelSize: Style.font.caption
           }
           // volver a pedir la clave del sistema tras N sin usar la ventana
           Row {

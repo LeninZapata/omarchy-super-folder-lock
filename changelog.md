@@ -7,6 +7,7 @@
 - [update] Remove protection is now the only way to take a folder off the list: it becomes a normal folder again, in its place
 - [delete] "Remove from the list", which left a folder locked without showing it anywhere. An entry can only be removed alone when its files no longer exist
 - [update] Add back finds the folder by its password, so with several folders outside the list any of them can be added back (before, only the first one)
+- [update] Clearer rule names: "No keyboard or mouse for" (was "Computer idle") and "Show the folder after unlocking it" (was "Open in file manager"), which now has its own "When opening" group
 - [fix] The window opens again after closing it with Esc
 - [fix] The shortcut never takes over or releases a key that something else uses in any Hyprland submap; if Hyprland's bind list can't be read, nothing is touched
 

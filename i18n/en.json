@@ -35,10 +35,10 @@
   "form.key2": "Repeat password",
   "form.key2Placeholder": "the same again",
   "form.autoLock": "LOCK AUTOMATICALLY",
-  "rule.idle": "Computer idle",
+  "rule.idle": "No keyboard or mouse for",
   "rule.workspace": "Leaving its workspace",
   "rule.screen": "Screen locked",
-  "rule.openFm": "Open in file manager",
+  "rule.openFm": "Show the folder after unlocking it",
   "rule.inherit": "Default",
   "rule.off": "No",
   "rule.on": "Yes",
@@ -159,5 +159,7 @@
   "error.readd.failed": "The data to check its password is missing",
   "orphans.hintMany": "Nothing was deleted: their files are still there, locked. Add them back one by one: each password finds its folder.",
   "forget.gone": "Its files no longer exist: remove it from the list",
-  "error.forget.exists": "Its files are still there: use Remove protection"
+  "error.forget.exists": "Its files are still there: use Remove protection",
+  "form.whenOpening": "WHEN OPENING",
+  "settings.windowCaption": "THIS WINDOW"
 }

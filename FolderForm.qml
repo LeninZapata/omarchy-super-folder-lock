@@ -212,7 +212,7 @@ Item {
     property string ruleKey: ""
     property string label: ""
     spacing: Style.space(6)
-    Label { text: rr.label }
+    Label { text: rr.label; width: Style.space(270) }
     Repeater {
       model: ["inherit", "off", "on"]
       Button {
@@ -430,6 +430,16 @@ Item {
     }
     RuleRow { ruleKey: "workspaceLock"; label: form.t("rule.workspace") }
     RuleRow { ruleKey: "screenLock"; label: form.t("rule.screen") }
+
+    // No tiene que ver con bloquear: va en su propio grupo.
+    Rectangle { width: parent.width; height: Style.normalBorderWidth; color: form.win.lineColor }
+    Text {
+      textFormat: Text.PlainText
+      text: form.t("form.whenOpening")
+      color: form.win.mutedFg
+      font.family: form.win.fontFamily
+      font.pixelSize: Style.font.caption
+    }
     RuleRow { ruleKey: "openInFileManager"; label: form.t("rule.openFm") }
 
     Text {

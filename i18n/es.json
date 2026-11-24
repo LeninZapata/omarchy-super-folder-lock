@@ -35,10 +35,10 @@
   "form.key2": "Repetir clave",
   "form.key2Placeholder": "la misma otra vez",
   "form.autoLock": "CIERRE AUTOMÁTICO",
-  "rule.idle": "Sin tocar el equipo",
+  "rule.idle": "Sin tocar teclado ni ratón",
   "rule.workspace": "Al salir de su workspace",
   "rule.screen": "Al bloquear la pantalla",
-  "rule.openFm": "Abrir en el gestor",
+  "rule.openFm": "Mostrar la carpeta al abrirla",
   "rule.inherit": "General",
   "rule.off": "No",
   "rule.on": "Sí",
@@ -159,5 +159,7 @@
   "error.readd.failed": "Faltan los datos para comprobar su clave",
   "orphans.hintMany": "No se ha borrado nada: sus archivos siguen ahí, bloqueados. Agrégalas de una en una: cada clave encuentra su carpeta.",
   "forget.gone": "Sus archivos ya no existen: quitarla del listado",
-  "error.forget.exists": "Sus archivos siguen ahí: usa Quitar protección"
+  "error.forget.exists": "Sus archivos siguen ahí: usa Quitar protección",
+  "form.whenOpening": "AL ABRIR",
+  "settings.windowCaption": "ESTA VENTANA"
 }
