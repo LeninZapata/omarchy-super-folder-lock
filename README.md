@@ -22,7 +22,7 @@ ten files or with a hundred thousand.
 ![A folder with photos is chosen, given a password, and disappears from its place](docs/demo/hide.gif)
 
 **Type its password and it is back.** The window asks for your system password before it lists anything;
-then each folder opens with its own. Opening it shows it in Files, where it was, with everything in it.
+then each folder opens with its own and, unless you turn that off, shows up in Files with everything in it.
 
 ![The system password opens the window, the folder password opens the folder, and Files shows its photos](docs/demo/unlock.gif)
 
@@ -41,10 +41,10 @@ gocryptfs vault, which only its password opens, on any computer. It hands you a 
 
 ![An encrypted folder is created, its recovery key is shown, and on the disk its files have unreadable names](docs/demo/encrypt.gif)
 
-**Change your mind whenever you want.** *Remove protection* gives you back a normal folder, with every
-file in it, and takes it off the list. No folder leaves the list while it is still locked.
+**Change your mind whenever you want.** The shield button, *Remove protection*, asks for its
+password and gives you back a normal folder. Only then does it leave the list: nothing stays locked unseen.
 
-![Remove protection asks for the password and the folder is a normal one again](docs/demo/remove.gif)
+![The shield button asks for the password; the folder is a normal one again and is no longer in the list](docs/demo/remove.gif)
 
 ## Two lock types
 
@@ -60,7 +60,7 @@ file in it, and takes it off the list. No folder leaves the list while it is sti
 While locked, a folder of either type can be **Not shown** (it disappears from its place) or
 **Shown, empty** (it stays there with nothing inside).
 
-<p align="center"><img src="docs/screenshots/form.png" alt="The new folder form: folder, lock type, how it looks when locked, password and automatic locking rules" width="640"></p>
+<p align="center"><img src="docs/screenshots/form.png" alt="The new folder form: folder, lock type, how it looks when locked, password, automatic locking rules and whether it is shown after unlocking" width="640"></p>
 
 ## What it does
 
@@ -151,14 +151,14 @@ Double-click to open works with Files (Nautilus).
 
 The rules apply to every folder left on **Default**:
 
-<p align="center"><img src="docs/screenshots/settings.png" alt="The settings page with the default rules" width="640"></p>
+<p align="center"><img src="docs/screenshots/settings.png" alt="The settings page: general options, default rules, when opening and this window" width="640"></p>
 
 | Setting | Default | |
 |---|---|---|
 | No keyboard or mouse for | On, 10 min | 1 min – 2 h |
+| Maximum time open | Off | 5 min – 24 h |
 | Leaving its workspace | On | |
 | Screen locked | On | |
-| Maximum time open | Off | 5 min – 24 h |
 | Show the folder after unlocking it | On | off: it unlocks, and the window stays open |
 | Ask for the password again after | 2 min | 30 s – 1 h |
 | Shortcut to open this window | None | press the keys; one already in use is never taken over |
