@@ -154,6 +154,27 @@ class VisibleWatchTest(unittest.TestCase):
         self.assertEqual(self.line(3), "open %s 0xabc" % FID)
 
 
+class FilesRefreshTest(unittest.TestCase):
+    def test_every_files_window_of_the_folder_gets_f5_and_no_other(self):
+        base = tempfile.mkdtemp(prefix="sfl-test-", dir="/tmp")
+        self.addCleanup(shutil.rmtree, base)
+        wins = [("org.gnome.Nautilus", "Diario", "0xa1"), ("org.gnome.Nautilus", "Diario", "0xa2"),
+                ("org.gnome.Nautilus", "Otra", "0xa3"), ("Alacritty", "Diario", "0xa4"),
+                ("org.gnome.Nautilus", "Diario", '0xa5" })--')]
+        with open(os.path.join(base, "clients.json"), "w") as f:
+            json.dump([{"class": c, "title": t, "address": a} for c, t, a in wins], f)
+        fake = os.path.join(base, "hyprctl")
+        with open(fake, "w") as f:
+            f.write('#!/bin/sh\nif [ "$1" = clients ]; then cat "%s/clients.json"; else echo "$2" >> "%s/sent"; fi\n' % (base, base))
+        os.chmod(fake, 0o755)
+        subprocess.run(["python3", "-I", os.path.join(HERE, "..", "bin", "filesrefresh.py"), "/algo/Diario/"],
+                       env=dict(os.environ, SFL_HYPRCTL=fake), check=True, timeout=10)
+        with open(os.path.join(base, "sent")) as f:
+            sent = f.read().splitlines()
+        self.assertEqual(sent, ['hl.dsp.send_shortcut({ mods = "", key = "F5", window = "address:%s" })' % a
+                                for a in ("0xa1", "0xa2")])
+
+
 class WatchesTest(unittest.TestCase):
     """En el disco del repo (btrfs en Omarchy), no en /tmp: ahí `stat` y fdinfo no coinciden."""
 

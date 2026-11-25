@@ -132,6 +132,14 @@ Item {
     return null
   }
 
+  // Las ventanas de Files que ya mostraban la carpeta siguen vacías hasta recargarse: se
+  // refrescan ANTES de abrir, porque xdg-open puede traer al frente justo una de ellas.
+  readonly property string filesRefreshPath: String(Qt.resolvedUrl("bin/filesrefresh.py")).replace(/^file:\/\//, "")
+  function refreshFiles(path, show) {
+    if (show) Quickshell.execDetached(["sh", "-c", 'python3 -I "$1" "$2"; xdg-open "$2"', "sfl-open", filesRefreshPath, path])
+    else Quickshell.execDetached(["python3", "-I", filesRefreshPath, path])
+  }
+
   // La clave llega del campo, viaja por stdin y no se guarda en ninguna propiedad.
   // recovery = la clave escrita es la de recuperación (gocryptfs -masterkey, verificada con el testigo).
   function unlock(id, key, recovery) {
@@ -153,19 +161,22 @@ Item {
       root.startWatchdog()
       if (fromCard) {
         // Nautilus sigue enseñando la carpeta vacía de debajo: se cierra esa ventana y se
-        // abre otra ya con el contenido.
+        // abre otra ya con el contenido (las demás que la mostraban se refrescan).
         if (root.cardAddress !== "")
           Quickshell.execDetached(["hyprctl", "dispatch", 'hl.dsp.window.close({ window = "address:' + root.cardAddress + '" })'])
-        Quickshell.execDetached(["sh", "-c", 'sleep 0.4; xdg-open "$1"', "sfl-open", r.data.path])
+        Quickshell.execDetached(["sh", "-c", 'sleep 0.4; python3 -I "$1" "$2"; xdg-open "$2"', "sfl-open", root.filesRefreshPath, r.data.path])
         root.closeWindow()
         return
       }
       // H3: abrir en el gestor y cerrar la ventana (y con ella la puerta); si la regla
       // dice que no, la ventana se queda.
       if (root.eff(rules).openInFileManager) {
-        Quickshell.execDetached(["xdg-open", r.data.path])
+        root.refreshFiles(r.data.path, true)
         root.closeWindow()
-      } else root.refresh()
+      } else {
+        root.refreshFiles(r.data.path, false)
+        root.refresh()
+      }
     })
   }
 
@@ -242,7 +253,7 @@ Item {
     unprotectId = ""
     unprotectCb = null
     if (!r.ok) setRowError(id, r.error)
-    else Quickshell.execDetached(["xdg-open", r.data.path])
+    else refreshFiles(r.data.path, true)
     if (cb) cb(r)
     refresh()
   }

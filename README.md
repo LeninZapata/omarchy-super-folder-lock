@@ -92,16 +92,15 @@ While locked, a folder of either type can be **Not shown** (it disappears from i
 
 ## What it touches
 
-- No root, no network, and nothing is written to `/etc`. Your password is checked with the PAM service
-  Omarchy's own lock screen uses.
+- No root, no network, and nothing is written to `/etc`. Your password is checked with the PAM service Omarchy's own lock screen uses.
 - It moves or mounts **only the folders you add**. System folders are refused.
 - It adds one Hyprland window rule (its own window) and, only if you set one, one shortcut. Both are
   applied while the shell runs; your configuration files are not edited.
 - It writes one launcher entry, and its own folders (see [Data](#data)).
 - When a folder locks, it removes that folder's entries from the thumbnail cache and from
   `recently-used.xbel`. Nothing else in them changes.
-- To tell which programs are using a folder, and whether Files is showing a locked one, it reads `/proc`
-  for your own processes.
+- It reads `/proc` for your own processes: which ones use a folder, and which folder Files is showing.
+- After unlocking, it sends F5 to the Files windows with that folder's name, so they show its files.
 - While a folder or its window is open, it asks Omarchy every 2 seconds whether the screen is locked.
 
 ## Install
@@ -239,7 +238,7 @@ omarchy-shell leninzapata.super-folder-lock status    # JSON: how many are open;
 ├── Shortcut.js           # the shortcut sent to Hyprland
 ├── Watchdog.js           # locks everything if the shell stops
 ├── bin/folderlock.py     # the helper: the only one that writes the list and moves or mounts folders
-├── bin/visiblewatch.py   # notices a double-click on a locked, shown folder
+├── bin/visiblewatch.py   # notices a double-click on a locked folder (filesrefresh.py: reloads Files once unlocked)
 ├── bin/binds.py          # releases the shortcut, only where it is the plugin's
 ├── i18n/                 # en.json, es.json
 └── tests/                # python and node tests, in a sandbox with its own home
