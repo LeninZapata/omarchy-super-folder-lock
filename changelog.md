@@ -2,6 +2,10 @@
 
 > What changed, by version (newest first; the last 10 are kept).
 
+## 0.2.1 - 2026-11-25 01:19
+---
+- [fix] A visible locked folder no longer asks for its password on its own: when it locked while Files was showing it (for example on leaving its workspace), Files reading it again counted as a double-click
+
 ## 0.2.0 - 2026-11-24 11:20
 ---
 - [update] Remove protection is now the only way to take a folder off the list: it becomes a normal folder again, in its place

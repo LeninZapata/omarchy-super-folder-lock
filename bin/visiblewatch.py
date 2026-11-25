@@ -5,6 +5,8 @@ Una carpeta VISIBLE bloqueada queda vacía en su sitio. Cuando alguien entra en 
 doble clic, Nautilus abre el directorio (IN_OPEN) Y su ventana pasa a llamarse como la
 carpeta. Lo primero solo no basta: el indexador (localsearch), `find` o `ls` también la
 abren. Por eso se avisa SOLO si en ±1,5 s aparece una ventana de Nautilus con ese nombre.
+Y no cuenta la ventana que YA estaba dentro cuando se bloqueó: al bloquearse, Nautilus vuelve
+a leer la carpeta y ya se llama como ella (pedía la clave sin doble clic, 2026-11-25).
 
 Uso: python3 -I visiblewatch.py      (lo lanza Service.qml y lo mantiene vivo)
 Salida, una línea por petición:  open <id> <address-de-la-ventana>   (sin nombres ni rutas)
@@ -32,6 +34,7 @@ EVENT = struct.Struct("iIII")
 
 CONFIRM_SECONDS = 1.5
 QUIET_SECONDS = 3.0
+INSIDE_POLL_SECONDS = 1.0
 FILE_MANAGERS = ("org.gnome.nautilus", "nautilus")
 
 
@@ -44,11 +47,20 @@ def hyprctl_clients():
         return []
 
 
-def find_window(name):
-    """Una ventana de un gestor de archivos que ya se llama como la carpeta."""
-    for c in hyprctl_clients():
-        if str(c.get("class", "")).lower() in FILE_MANAGERS and c.get("title") == name:
-            return c.get("address", "")
+def folder_name(path):
+    return os.path.basename(path.rstrip("/"))
+
+
+def windows_named(name, clients=None):
+    """Direcciones de las ventanas del gestor de archivos que se llaman como la carpeta."""
+    return {str(c.get("address", "")) for c in (hyprctl_clients() if clients is None else clients)
+            if str(c.get("class", "")).lower() in FILE_MANAGERS and c.get("title") == name}
+
+
+def find_window(name, skip=()):
+    """Una ventana del gestor que ya se llama como la carpeta y no estaba ya dentro."""
+    for addr in sorted(windows_named(name) - set(skip)):
+        return addr
     return None
 
 
@@ -78,6 +90,9 @@ class Watcher:
         self.folders = {}   # wd -> (id, path)
         self.meta = set()   # wd de la carpeta de datos y la de montajes
         self.quiet = {}     # id -> hasta cuándo no se vuelve a avisar
+        # id -> ventanas que ya estaban dentro (al bloquearse, o tras avisar): sus relecturas
+        # no son un doble clic. Salen del conjunto en cuanto dejan de llamarse como la carpeta.
+        self.inside = {}
         self.dirty = True
         self.removed = set()
 
@@ -97,14 +112,28 @@ class Watcher:
         for wd in list(self.folders):
             self.libc.inotify_rm_watch(self.fd, wd)
         self.removed = set(self.folders)
+        watched_before = {fid for fid, _ in self.folders.values()}
         self.folders = {}
         missing = False
+        clients = None
+        inside = {}
         for path, fid in visible_locked().items():
             wd = self.add(path, IN_OPEN | IN_ONLYDIR)
             if wd is not None:
                 self.folders[wd] = (fid, path)
             else:
                 missing = True
+            if fid in watched_before:
+                if self.inside.get(fid):
+                    inside[fid] = self.inside[fid]
+            else:
+                # Recién bloqueada: la ventana que la tenía abierta sigue dentro.
+                if clients is None:
+                    clients = hyprctl_clients()
+                now = windows_named(folder_name(path), clients)
+                if now:
+                    inside[fid] = now
+        self.inside = inside
         # Una carpeta visible cuya ruta aún no existe (se está creando o la movieron): se
         # vuelve a intentar en la próxima vuelta (cada 5 s como mucho).
         self.dirty = missing
@@ -126,12 +155,21 @@ class Watcher:
             out.append((wd, mask))
         return out
 
+    def prune_inside(self):
+        """Olvida las ventanas que ya salieron de la carpeta (otro título o cerradas)."""
+        if not self.inside:
+            return
+        clients = hyprctl_clients()
+        names = {fid: folder_name(path) for fid, path in self.folders.values()}
+        self.inside = {fid: keep for fid, addrs in self.inside.items()
+                       if fid in names and (keep := addrs & windows_named(names[fid], clients))}
+
     def confirm(self, fid, path):
         """El IN_OPEN vale solo si aparece la ventana del gestor con el nombre de la carpeta."""
-        name = os.path.basename(path.rstrip("/"))
+        name = folder_name(path)
         end = time.time() + CONFIRM_SECONDS
         while time.time() < end:
-            addr = find_window(name)
+            addr = find_window(name, self.inside.get(fid, ()))
             if addr is not None:
                 return addr
             time.sleep(0.2)
@@ -141,7 +179,10 @@ class Watcher:
         while True:
             if self.dirty:
                 self.resync()
-            for wd, mask in self.events(5.0):
+            # Con alguna ventana dentro, se mira cada segundo si ya salió: si sale y vuelve a
+            # entrar con doble clic, ese sí cuenta.
+            self.prune_inside()
+            for wd, mask in self.events(INSIDE_POLL_SECONDS if self.inside else 5.0):
                 if wd in self.meta:
                     self.dirty = True
                     continue
@@ -159,6 +200,7 @@ class Watcher:
                 addr = self.confirm(fid, path)
                 if addr is not None:
                     self.quiet[fid] = time.time() + QUIET_SECONDS
+                    self.inside.setdefault(fid, set()).add(addr)
                     print("open %s %s" % (fid, addr), flush=True)
 
 

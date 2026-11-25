@@ -84,6 +84,28 @@ class VisibleWatchTest(unittest.TestCase):
         self.assertIsNone(self.line(2.5))
         self.assertTrue(self.sb.helper("lock", FID)["ok"])
 
+    def lock_with_window_inside(self):
+        """Abierta con Nautilus dentro; al bloquearse, esa ventana sigue llamándose «Diario»."""
+        os.rmdir(self.path)
+        self.assertTrue(self.sb.helper("unlock", FID, stdin=KEY + "\n")["ok"])
+        time.sleep(0.6)
+        self.set_window("Diario")
+        self.assertTrue(self.sb.helper("lock", FID)["ok"])
+        time.sleep(0.8)
+
+    def test_window_already_inside_at_lock_is_ignored(self):
+        self.lock_with_window_inside()
+        os.listdir(self.path)           # Nautilus relee la carpeta al bloquearse: no es doble clic
+        self.assertIsNone(self.line(2.5))
+
+    def test_window_that_left_and_came_back_is_reported(self):
+        self.lock_with_window_inside()
+        self.set_window("Documentos")    # sale a la carpeta de arriba…
+        time.sleep(1.5)
+        self.set_window("Diario")        # …y vuelve a entrar con doble clic
+        os.listdir(self.path)
+        self.assertEqual(self.line(3), "open %s 0xabc" % FID)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=1)
