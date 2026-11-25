@@ -100,7 +100,8 @@ While locked, a folder of either type can be **Not shown** (it disappears from i
 - It writes one launcher entry, and its own folders (see [Data](#data)).
 - When a folder locks, it removes that folder's entries from the thumbnail cache and from
   `recently-used.xbel`. Nothing else in them changes.
-- To tell which programs are using a folder, it reads `/proc` for your own processes.
+- To tell which programs are using a folder, and whether Files is showing a locked one, it reads `/proc`
+  for your own processes.
 - While a folder or its window is open, it asks Omarchy every 2 seconds whether the screen is locked.
 
 ## Install

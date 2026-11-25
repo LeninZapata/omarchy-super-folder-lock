@@ -1,10 +1,14 @@
 """bin/visiblewatch.py: avisa solo si el IN_OPEN viene con una ventana de Nautilus con el
 nombre de la carpeta. `hyprctl` es falso (SFL_HYPRCTL), controlado por el test."""
+import ctypes
+import ctypes.util
 import json
 import os
 import select
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import unittest
 
@@ -13,6 +17,8 @@ from test_folderlock import Sandbox, FID, KEY  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WATCH = os.path.join(HERE, "..", "bin", "visiblewatch.py")
+sys.path.insert(0, os.path.join(HERE, "..", "bin"))
+import visiblewatch  # noqa: E402
 
 
 class VisibleWatchTest(unittest.TestCase):
@@ -46,9 +52,22 @@ class VisibleWatchTest(unittest.TestCase):
         r, _, _ = select.select([self.proc.stdout], [], [], timeout)
         return self.proc.stdout.readline().strip() if r else None
 
-    def set_window(self, title):
+    def set_window(self, title, pid=None):
+        win = {"class": "org.gnome.Nautilus", "title": title, "address": "0xabc"}
+        if pid is not None:
+            win["pid"] = pid
         with open(self.clients, "w") as f:
-            json.dump([{"class": "org.gnome.Nautilus", "title": title, "address": "0xabc"}], f)
+            json.dump([win], f)
+
+    def watch_as_nautilus(self, path):
+        """Este proceso hace de Nautilus: vigila (inotify) la carpeta que «muestra»."""
+        libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
+        fd = libc.inotify_init1(os.O_CLOEXEC)
+        self.assertGreaterEqual(fd, 0)
+        self.watch_fds = getattr(self, "watch_fds", []) + [fd]
+        self.addCleanup(self.stop_watching)
+        self.assertGreaterEqual(libc.inotify_add_watch(fd, path.encode(), 0x2 | 0x100 | 0x200), 0)
+        return os.getpid()
 
     def test_indexer_open_is_ignored(self):
         os.listdir(self.path)           # como find / localsearch: sin ventana
@@ -84,6 +103,10 @@ class VisibleWatchTest(unittest.TestCase):
         self.assertIsNone(self.line(2.5))
         self.assertTrue(self.sb.helper("lock", FID)["ok"])
 
+    def stop_watching(self):
+        while getattr(self, "watch_fds", []):
+            os.close(self.watch_fds.pop())
+
     def lock_with_window_inside(self):
         """Abierta con Nautilus dentro; al bloquearse, esa ventana sigue llamándose «Diario»."""
         os.rmdir(self.path)
@@ -105,6 +128,54 @@ class VisibleWatchTest(unittest.TestCase):
         self.set_window("Diario")        # …y vuelve a entrar con doble clic
         os.listdir(self.path)
         self.assertEqual(self.line(3), "open %s 0xabc" % FID)
+
+    def test_parent_with_the_same_name_is_ignored(self):
+        # Diario/Diario: Nautilus muestra la de ARRIBA y abre las subcarpetas para contarlas
+        pid = self.watch_as_nautilus(os.path.dirname(self.path))
+        self.set_window("Diario", pid)
+        os.listdir(self.path)
+        self.assertIsNone(self.line(2.5))
+
+    def test_window_showing_the_folder_is_reported(self):
+        pid = self.watch_as_nautilus(self.path)
+        self.set_window("Diario", pid)
+        os.listdir(self.path)
+        self.assertEqual(self.line(3), "open %s 0xabc" % FID)
+
+    def test_back_to_a_parent_with_the_same_name_and_in_again_is_reported(self):
+        # Diario/Diario: al volver arriba el título NO cambia; lo que cambia es qué vigila
+        self.set_window("Diario", self.watch_as_nautilus(self.path))
+        os.listdir(self.path)
+        self.assertEqual(self.line(3), "open %s 0xabc" % FID)
+        self.stop_watching()             # cancela la tarjeta y sale a la de arriba
+        time.sleep(3.5)                  # pasa QUIET_SECONDS
+        self.watch_as_nautilus(self.path)  # vuelve a entrar con doble clic
+        os.listdir(self.path)
+        self.assertEqual(self.line(3), "open %s 0xabc" % FID)
+
+
+class WatchesTest(unittest.TestCase):
+    """En el disco del repo (btrfs en Omarchy), no en /tmp: ahí `stat` y fdinfo no coinciden."""
+
+    def test_tells_the_shown_folder_from_its_parent(self):
+        base = tempfile.mkdtemp(prefix="sfl-test-", dir=HERE)
+        self.addCleanup(shutil.rmtree, base)
+        inner = os.path.join(base, "in")
+        os.mkdir(inner)
+        w = visiblewatch.Watcher()
+        self.addCleanup(os.close, w.fd)
+        targets = {p: w.target(w.add(p, 0x20)) for p in (base, inner)}
+        self.assertTrue(all(targets.values()))
+        # otro proceso que solo muestra la de arriba
+        code = ("import ctypes,sys,time;l=ctypes.CDLL(None);fd=l.inotify_init1(0);"
+                "l.inotify_add_watch(fd,sys.argv[1].encode(),0x100);print(1,flush=True);time.sleep(60)")
+        other = subprocess.Popen([sys.executable, "-c", code, base], stdout=subprocess.PIPE)
+        self.addCleanup(other.stdout.close)
+        self.addCleanup(other.wait)
+        self.addCleanup(other.kill)
+        other.stdout.readline()
+        self.assertTrue(visiblewatch.watches(other.pid, targets[base]))
+        self.assertFalse(visiblewatch.watches(other.pid, targets[inner]))
 
 
 if __name__ == "__main__":

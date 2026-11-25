@@ -5,6 +5,7 @@
 ## 0.2.1 - 2026-11-25 01:19
 ---
 - [fix] A visible locked folder no longer asks for its password on its own: when it locked while Files was showing it (for example on leaving its workspace), Files reading it again counted as a double-click
+- [fix] Opening a folder no longer asks for the password of a locked folder inside it that has the same name: it now asks only when Files is showing that folder itself
 
 ## 0.2.0 - 2026-11-24 11:20
 ---
