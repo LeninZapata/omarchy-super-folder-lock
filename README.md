@@ -6,18 +6,13 @@ Folders with a password for the Omarchy shell. Lock a folder and it leaves its p
 empty); type its password to get it back. Walk away, switch workspace or lock the screen, and it locks
 again on its own.
 
-**Status: v0.2.0 (beta).** Two lock types (Hide and Encrypt), automatic locking, folders on
-external disks, and a window that asks for your system password before it lists anything.
+**Status: v0.2.0 (beta).** Two lock types (Hide and Encrypt), automatic locking, folders on external disks, and a window that asks for your system password before it lists anything.
 
-> **Read this first.** *Hide*, the default, keeps a folder away from people using your screen. It is
-> **not** encryption. If the files must stay safe even when someone takes the disk, use *Encrypt*.
-> See [Known limits](#known-limits).
+> **Read this first.** *Hide*, the default, keeps a folder away from people using your screen. It is **not** encryption. If the files must stay safe even when someone takes the disk, use *Encrypt*. See [Known limits](#known-limits).
 
 ## See it
 
-**Lock a folder that already has files.** Choose it, type a password, and it is gone from its place.
-Nothing is copied: the folder is moved out of sight on the same disk, so it takes the same instant with
-ten files or with a hundred thousand.
+**Lock a folder that already has files.** Choose it, type a password, and it is gone from its place. Nothing is copied: the folder is moved out of sight on the same disk, so it takes the same instant with ten files or with a hundred thousand.
 
 ![A folder with photos is chosen, given a password, and disappears from its place](docs/demo/hide.gif)
 
@@ -78,6 +73,9 @@ While locked, a folder of either type can be **Not shown** (it disappears from i
   - when the screen locks;
   - after a maximum time open (off by default), with a button to postpone it 15 minutes.
 - **It tells you what is using a folder.** Locking by hand first lists the programs with its files open.
+- **It can close what was opened from it** (off by default). Some time after a folder locks (30 minutes,
+  1 min – 24 h), the windows that had its files close as if you clicked ×; if one is still there 5 seconds
+  later, its program is ended. Files, and programs with other windows open, are never forced.
 - **Double-click to open.** A *Shown, empty* folder opened in Files (Nautilus) brings up a small card
   asking for its password.
 - **Works on external disks.** A folder on a connected disk stays on that disk.
@@ -94,13 +92,13 @@ While locked, a folder of either type can be **Not shown** (it disappears from i
 
 - No root, no network, and nothing is written to `/etc`. Your password is checked with the PAM service Omarchy's own lock screen uses.
 - It moves or mounts **only the folders you add**. System folders are refused.
-- It adds one Hyprland window rule (its own window) and, only if you set one, one shortcut. Both are
-  applied while the shell runs; your configuration files are not edited.
+- It adds one Hyprland window rule (its own window) and, only if you set one, one shortcut. Both are applied while the shell runs; your configuration files are not edited.
 - It writes one launcher entry, and its own folders (see [Data](#data)).
-- When a folder locks, it removes that folder's entries from the thumbnail cache and from
-  `recently-used.xbel`. Nothing else in them changes.
+- When a folder locks, it removes that folder's entries from the thumbnail cache and from `recently-used.xbel`. Nothing else in them changes.
 - It reads `/proc` for your own processes: which ones use a folder, and which folder Files is showing.
-- After unlocking, it sends F5 to the Files windows with that folder's name, so they show its files.
+- After unlocking or locking, it sends F5 to the Files windows with that folder's name, so they reload.
+- Only with *Close what it opened* on: it closes those windows through Hyprland and, if one stays, sends
+  `SIGTERM` (then `SIGKILL`) to that program alone, after checking it is still the same process.
 - While a folder or its window is open, it asks Omarchy every 2 seconds whether the screen is locked.
 
 ## Install
@@ -157,6 +155,7 @@ The rules apply to every folder left on **Default**:
 |---|---|---|
 | No keyboard or mouse for | On, 10 min | 1 min – 2 h |
 | Maximum time open | Off | 5 min – 24 h |
+| Close what it opened, after | Off, 30 min | 1 min – 24 h, counted from the moment it locks |
 | Leaving its workspace | On | |
 | Screen locked | On | |
 | Show the folder after unlocking it | On | off: it unlocks, and the window stays open |
@@ -200,7 +199,8 @@ chmod 700 <id> && mv <id>/data ~/rescued-folder
   computer, can reach the files (the commands are right above). It protects from people looking
   around, not from an attacker.
 - **An open folder is open.** While it is unlocked, any program of your account can read it.
-- **A file already open when the folder locks** can still be read by the program that opened it.
+- **A file already open when the folder locks** can still be read by the program that opened it, until
+  *Close what it opened* closes it (if you turn it on).
 - **With Encrypt, losing the password and the recovery key means losing the files.** Nobody can recover
   them. With Hide there is no password recovery in the window.
 - **Moving files into an Encrypt folder** does not wipe the originals: on an SSD or on btrfs, what you
@@ -238,7 +238,7 @@ omarchy-shell leninzapata.super-folder-lock status    # JSON: how many are open;
 ├── Shortcut.js           # the shortcut sent to Hyprland
 ├── Watchdog.js           # locks everything if the shell stops
 ├── bin/folderlock.py     # the helper: the only one that writes the list and moves or mounts folders
-├── bin/visiblewatch.py   # notices a double-click on a locked folder (filesrefresh.py: reloads Files once unlocked)
+├── bin/visiblewatch.py   # notices a double-click on a locked folder (filesrefresh.py: reloads Files on unlock and lock)
 ├── bin/binds.py          # releases the shortcut, only where it is the plugin's
 ├── i18n/                 # en.json, es.json
 └── tests/                # python and node tests, in a sandbox with its own home

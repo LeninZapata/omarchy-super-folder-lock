@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "leninzapata.super-folder-lock",
   "name": "Super Folder Lock",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "author": "leninzapata",
   "license": "MIT",
   "description": "Folders with a password: hide them without copying anything, or encrypt them (gocryptfs). They lock again automatically when you leave the computer or the workspace",

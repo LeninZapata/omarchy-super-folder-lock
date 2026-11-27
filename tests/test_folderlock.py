@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -717,6 +718,95 @@ class HelperTest(unittest.TestCase):
             self.assertEqual(self.sb.helper("list")["data"]["folders"], [])
             self.assertEqual(os.listdir(os.path.join(self.sb.data, "locked")), [])
             shutil.rmtree(path)
+
+    def fake_hyprctl(self, name):
+        """Un hyprctl falso con una ventana de Files llamada como la carpeta; anota lo enviado."""
+        sent = os.path.join(self.sb.base, "sent")
+        with open(os.path.join(self.sb.base, "clients.json"), "w") as f:
+            json.dump([{"class": "org.gnome.Nautilus", "title": name, "address": "0xb1"}], f)
+        fake = os.path.join(self.sb.base, "hyprctl")
+        with open(fake, "w") as f:
+            f.write('#!/bin/sh\nif [ "$1" = clients ]; then cat "%s/clients.json"; else echo "$2" >> "%s"; fi\n'
+                    % (self.sb.base, sent))
+        os.chmod(fake, 0o755)
+        self.sb.env["SFL_HYPRCTL"] = fake
+        return sent
+
+    def wait_lines(self, path, n):
+        for _ in range(50):
+            if os.path.exists(path):
+                with open(path) as f:
+                    lines = f.read().splitlines()
+                if len(lines) >= n:
+                    return lines
+            time.sleep(0.1)
+        return []
+
+    def test_lock_reloads_files_windows(self):
+        """Files seguía enseñando los archivos de una carpeta ya bloqueada hasta pulsar F5."""
+        f5 = 'hl.dsp.send_shortcut({ mods = "", key = "F5", window = "address:0xb1" })'
+        path = self.originals()
+        sent = self.fake_hyprctl(os.path.basename(path))
+        fid = self.hide(path)["data"]["id"]
+        self.assertEqual(self.wait_lines(sent, 1), [f5])                # protegerla también la vacía
+        self.sb.helper("unlock", fid, stdin=KEY + "\n")
+        self.assertTrue(self.sb.helper("lock", fid)["data"]["wasOpen"])
+        self.assertEqual(self.wait_lines(sent, 2), [f5, f5])
+        enc = self.sb.add_folder(fid="fedcba9876543210", rel=os.path.basename(path) + "-c")
+        self.fake_hyprctl(os.path.basename(enc))
+        self.assertTrue(self.sb.helper("unlock", "fedcba9876543210", stdin=KEY + "\n")["ok"])
+        self.assertTrue(self.sb.helper("lockall")["ok"])
+        self.assertEqual(self.wait_lines(sent, 3), [f5, f5, f5])
+
+    def test_close_apps_after_lock(self):
+        """Lo abierto desde la carpeta se apunta al bloquear y `closeapps` lo cierra (o lo fuerza)."""
+        path = self.originals()
+        fid = self.hide(path)["data"]["id"]
+        self.sb.helper("unlock", fid, stdin=KEY + "\n")
+        sleeper = "import time; time.sleep(60)"
+        viewer = subprocess.Popen(["python3", "-c", sleeper, "a.txt"], cwd=path)          # ruta relativa
+        office = subprocess.Popen(["python3", "-c", sleeper, "file://" + path + "/sub/b.bin"])
+        shell = subprocess.Popen(["python3", "-c", sleeper], cwd=path)                    # solo su cwd
+        for p in (viewer, office, shell):
+            self.addCleanup(p.wait)
+            self.addCleanup(p.kill)
+        time.sleep(0.3)
+        r = self.sb.helper("lock", fid, "apps")
+        self.assertEqual(r["data"]["apps"], 2, r)
+        with open(os.path.join(self.sb.run, "super-folder-lock", "close-%s.json" % fid)) as f:
+            noted = json.load(f)["apps"]
+        self.assertEqual(sorted(a["pid"] for a in noted), sorted([viewer.pid, office.pid]))
+        self.assertEqual(oct(os.stat(os.path.join(self.sb.run, "super-folder-lock", "close-%s.json" % fid)).st_mode & 0o777), "0o600")
+        # una ventana el visor (no se cierra con la X: se fuerza); dos la de la oficina, una nombra el archivo
+        sent = os.path.join(self.sb.base, "sent")
+        with open(os.path.join(self.sb.base, "clients.json"), "w") as f:
+            json.dump([{"class": "viewer", "title": "a.txt", "address": "0xc1", "pid": viewer.pid},
+                       {"class": "office", "title": "b.bin - Office", "address": "0xc2", "pid": office.pid},
+                       {"class": "office", "title": "otro.odt - Office", "address": "0xc3", "pid": office.pid},
+                       {"class": "term", "title": "sh", "address": "0xc4", "pid": shell.pid}], f)
+        fake = os.path.join(self.sb.base, "hyprctl")
+        with open(fake, "w") as f:
+            f.write('#!/bin/sh\nif [ "$1" = clients ]; then cat "%s/clients.json"; else echo "$2" >> "%s"; fi\n'
+                    % (self.sb.base, sent))
+        os.chmod(fake, 0o755)
+        self.sb.env["SFL_HYPRCTL"] = fake
+        r = self.sb.helper("closeapps", fid)
+        self.assertEqual(r["data"], {"id": fid, "closed": 2, "forced": 1}, r)
+        with open(sent) as f:
+            closes = [l for l in f.read().splitlines() if "window.close" in l]
+        self.assertEqual(closes, ['hl.dsp.window.close({ window = "address:0xc1" })',
+                                  'hl.dsp.window.close({ window = "address:0xc2" })'])
+        self.assertIsNotNone(viewer.wait(timeout=5))       # forzado
+        self.assertIsNone(office.poll())                   # le quedan otras ventanas: nunca se fuerza
+        self.assertIsNone(shell.poll())
+        self.assertFalse(os.path.exists(os.path.join(self.sb.run, "super-folder-lock", "close-%s.json" % fid)))
+        self.assertEqual(self.sb.helper("closeapps", fid)["data"]["closed"], 0)   # dos veces: nada
+        # volver a abrirla antes del plazo: lo apuntado ya no vale
+        self.sb.helper("unlock", fid, stdin=KEY + "\n")
+        self.assertEqual(self.sb.helper("lock", fid, "apps")["data"]["apps"], 1)  # office sigue
+        self.sb.helper("unlock", fid, stdin=KEY + "\n")
+        self.assertFalse(os.path.exists(os.path.join(self.sb.run, "super-folder-lock", "close-%s.json" % fid)))
+        self.assertNotIn("apps", self.sb.helper("lock", fid)["data"])              # sin «apps», nada
 
     def test_hide_open_file_next_one_fails(self):
         path = self.originals()

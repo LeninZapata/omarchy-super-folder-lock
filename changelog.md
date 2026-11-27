@@ -2,6 +2,13 @@
 
 > What changed, by version (newest first; the last 10 are kept).
 
+## 0.2.2 - 2026-11-27 12:32
+---
+- [feature] New rule "Close what it opened, after" (off by default, 30 min): some time after a folder locks, the apps that opened its files are closed; their windows get a normal close request and, if they stay open, the app is stopped
+- [fix] Files windows that were showing a folder no longer keep listing its files after it locks: they reload on their own, with no need to press F5
+- [update] Cancel and Save sit at the bottom right of the folder form, apart from the options, so they no longer look like one more option
+- [fix] The "1 locked folder is not in the list" notice no longer logs a warning each time it is shown
+
 ## 0.2.1 - 2026-11-25 01:19
 ---
 - [fix] A visible locked folder no longer asks for its password on its own: when it locked while Files was showing it (for example on leaving its workspace), Files reading it again counted as a double-click

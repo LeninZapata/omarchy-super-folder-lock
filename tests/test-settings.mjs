@@ -23,7 +23,7 @@ assert.equal(s.junk, undefined);
 // regla efectiva: inherit → defecto; on/off propios mandan
 const d = S.defaults();
 let e = S.effective(d, { idleLock: "inherit", idleSeconds: null, workspaceLock: "off" });
-assert.deepEqual(plain(e), { idleLock: true, workspaceLock: false, screenLock: true, openInFileManager: true, maxOpenLock: false, idleSeconds: 600, maxOpenSeconds: 3600 });
+assert.deepEqual(plain(e), { idleLock: true, workspaceLock: false, screenLock: true, openInFileManager: true, maxOpenLock: false, closeApps: false, idleSeconds: 600, maxOpenSeconds: 3600, closeAppsSeconds: 1800 });
 e = S.effective(S.withDefault(d, "idleLock", "off"), { idleLock: "on", idleSeconds: 120 });
 assert.equal(e.idleLock, true); assert.equal(e.idleSeconds, 120);
 assert.equal(S.effective(S.withDefault(d, "idleLock", "off"), {}).idleLock, false);
@@ -57,6 +57,12 @@ assert.equal(C.closeIn(mo, eff, 100000, 90000), 200);        // inactividad 600 
 assert.equal(C.anyMaxOpen(open, eff), false);
 assert.equal(C.anyMaxOpen({ m: mo }, eff), true);
 assert.equal(S.effective(d, { maxOpenLock: "on", maxOpenSeconds: 100 }).maxOpenSeconds, 3600); // < 300 → defecto
+// cerrar lo abierto: apagado por defecto, 30 min listos; la carpeta manda sobre el general
+assert.equal(d.defaults.closeApps, "off"); assert.equal(d.defaults.closeAppsSeconds, 1800);
+assert.deepEqual([S.effective(d, { closeApps: "on" }).closeApps, S.effective(d, { closeApps: "on" }).closeAppsSeconds], [true, 1800]);
+assert.equal(S.effective(d, { closeApps: "on", closeAppsSeconds: 30 }).closeAppsSeconds, 1800);   // < 60 → defecto
+assert.equal(S.effective(S.withDefault(d, "closeApps", "on"), { closeApps: "off" }).closeApps, false);
+assert.equal(S.normalize({ defaults: { closeApps: "on", closeAppsSeconds: 600 } }).defaults.closeAppsSeconds, 600);
 // puerta
 assert.equal(C.gateExpired(0, 1e6, 120), false);
 assert.equal(C.gateExpired(1e6, 1e6 + 119000, 120), false);

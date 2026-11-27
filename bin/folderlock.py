@@ -7,7 +7,11 @@ Uso (siempre con `python3 -I`):  folderlock.py <subcomando> [id]
   unlock <id> [recovery]
                   clave por stdin → mkdir + montar + mount-<id>.json; con «recovery» lo que
                   llega es la clave de recuperación (gocryptfs -masterkey=stdin)
-  lock <id>       SIGTERM al daemon (si es el mismo proceso) → desmontar → rmdir
+  lock <id> [apps]
+                  SIGTERM al daemon (si es el mismo proceso) → desmontar → rmdir; con «apps»,
+                  antes apunta en close-<id>.json qué programas usaban algo de dentro → {apps: n}
+  closeapps <id>  cierra las ventanas de esos programas (como la X); si a los pocos segundos
+                  siguen ahí, los fuerza (SIGTERM y luego SIGKILL) → {closed, forced}
   lockall         lock de todo lo montado (vigía y arranque)
   update <id>     stdin: JSON {name, rules} → cambia nombre y reglas (no ruta ni clave)
   passwd <id>     stdin: línea 1 = clave actual, línea 2 = nueva → gocryptfs -passwd
@@ -356,6 +360,22 @@ def clean_thumbnails(path):
     return removed
 
 
+def refresh_files(path):
+    """Manda F5 a las ventanas de Files que mostraban la carpeta recién bloqueada.
+
+    En el modo `hide` la carpeta se mueve con rename y Nautilus sigue la carpeta movida: la
+    ventana seguía enseñando los archivos hasta pulsar F5 (2026-11-27, tras 2 h fuera). Va
+    en su propio proceso (no frena el bloqueo) y sin heredar la salida (el servicio lee una
+    sola línea JSON del auxiliar y espera a que se cierre).
+    """
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "filesrefresh.py")
+    try:
+        subprocess.Popen([sys.executable, "-I", script, path], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    except OSError:
+        pass
+
+
 BOOKMARK_RE = re.compile(r'[ \t]*<bookmark\s[^>]*?href="([^"]*)".*?</bookmark>[ \t]*\n?', re.S)
 
 
@@ -443,7 +463,7 @@ def unmount_now(path):
         subprocess.run(["fusermount3", "-u", "-z", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-RULE_KEYS = ("idleLock", "workspaceLock", "screenLock", "openInFileManager", "maxOpenLock")
+RULE_KEYS = ("idleLock", "workspaceLock", "screenLock", "openInFileManager", "maxOpenLock", "closeApps")
 MIN_KEY = 5
 
 
@@ -455,6 +475,8 @@ def clean_rules(raw):
     out["idleSeconds"] = sec if isinstance(sec, int) and not isinstance(sec, bool) and 60 <= sec <= 7200 else None
     mx = raw.get("maxOpenSeconds")
     out["maxOpenSeconds"] = mx if isinstance(mx, int) and not isinstance(mx, bool) and 300 <= mx <= 86400 else None
+    ca = raw.get("closeAppsSeconds")
+    out["closeAppsSeconds"] = ca if isinstance(ca, int) and not isinstance(ca, bool) and 60 <= ca <= 86400 else None
     return out
 
 
@@ -699,6 +721,7 @@ def hide_lock(fid, f):
     hide_settle(fid, f)
     clean_thumbnails(path)
     clean_recent(path)
+    refresh_files(path)
     drop_mount_file(fid)
     return True
 
@@ -873,6 +896,199 @@ def cmd_holders(args):
             except OSError:
                 pass
     return {"id": fid, "apps": sorted(apps)}
+
+
+# ---------------------------------------------------------------- cerrar lo abierto (2026-11-27)
+# Una imagen abierta desde la carpeta seguía en pantalla horas después de bloquearla. Al bloquear
+# (con la regla closeApps) se apunta qué programas usaban algo de dentro; pasado el plazo, el
+# servicio pide `closeapps` y se cierran sus ventanas. Solo programas con ventana propia: un
+# indexador o un `less` en una terminal no se tocan. Files no (se recarga con F5).
+CLOSE_RE = re.compile(r"^close-([0-9a-f]{16})\.json$")
+CLOSE_MAX_SECONDS = 86400
+CLOSE_GRACE_SECONDS = 5.0
+KEEP_COMMS = ("nautilus", "quickshell", "qs", ".quickshell-wra", "gocryptfs")
+KEEP_CLASSES = ("org.gnome.nautilus", "nautilus")
+MIN_TITLE_NAME = 3
+
+
+def close_file(fid):
+    return os.path.join(run_dir(), "close-%s.json" % fid)
+
+
+def drop_close_file(fid):
+    try:
+        os.unlink(close_file(fid))
+    except OSError:
+        pass
+
+
+def _inside(target, root):
+    return target == root or target.startswith(root + "/")
+
+
+def _arg_paths(base, raw):
+    """Rutas que un programa recibió en sus argumentos (relativas, a su cwd; file:// también)."""
+    try:
+        cwd = os.readlink(base + "/cwd")
+    except OSError:
+        cwd = None
+    out = []
+    for a in raw.split(b"\0")[1:]:
+        try:
+            a = a.decode()
+        except UnicodeDecodeError:
+            continue
+        if a.startswith("file://"):
+            a = urllib.parse.unquote(urllib.parse.urlsplit(a).path)
+        if not a or a.startswith("-"):
+            continue
+        if not a.startswith("/"):
+            # relativa: solo si existe (`python3 -c "código"` no es una ruta)
+            if cwd is None or not os.path.lexists(os.path.join(cwd, a)):
+                continue
+            a = os.path.join(cwd, a)
+        out.append(os.path.normpath(a))
+    return out
+
+
+def users_of(root, skip=()):
+    """{pid: (arranque, nombres)} de los programas del usuario que usan algo de dentro de `root`:
+    un archivo abierto, uno cargado en memoria (maps) o una ruta en sus argumentos (qimgv lee la
+    imagen y suelta el archivo). La carpeta de trabajo sola no cuenta: es una terminal."""
+    root = root.rstrip("/")
+    uid = os.getuid()
+    found = {}
+    for name in os.listdir("/proc"):
+        if not name.isdigit() or int(name) in skip:
+            continue
+        pid, base = int(name), "/proc/" + name
+        try:
+            if os.stat(base).st_uid != uid:
+                continue
+            with open(base + "/comm", encoding="utf-8") as fh:
+                if fh.read().strip() in KEEP_COMMS:
+                    continue
+            with open(base + "/cmdline", "rb") as fh:
+                targets = _arg_paths(base, fh.read())
+        except (OSError, UnicodeDecodeError):
+            continue
+        try:
+            for fd in os.listdir(base + "/fd"):
+                try:
+                    targets.append(os.readlink(base + "/fd/" + fd))
+                except OSError:
+                    pass
+        except OSError:
+            pass
+        try:
+            with open(base + "/maps", encoding="utf-8", errors="replace") as fh:
+                for line in fh:
+                    parts = line.rstrip("\n").split(None, 5)
+                    if len(parts) == 6 and parts[5].startswith("/"):
+                        targets.append(parts[5].removesuffix(" (deleted)"))
+        except OSError:
+            pass
+        names = {os.path.basename(t) for t in targets if _inside(t, root) and t != root}
+        if any(_inside(t, root) for t in targets):
+            start = pid_start_time(pid)
+            if start is not None:
+                found[pid] = (start, names)
+    return found
+
+
+def note_users(fid, f):
+    """Antes de bloquear: apunta en close-<id>.json quién usa la carpeta. Devuelve cuántos."""
+    if is_hide(f):
+        root = f.get("path") if hide_open(fid, f) else None
+    else:
+        info = read_mount(fid) or {}
+        root = info.get("mountPoint") if mount_alive(info) else None
+    if not root:
+        return 0
+    found = users_of(root, (os.getpid(), (read_mount(fid) or {}).get("pid")))
+    apps = [{"pid": pid, "start": start, "names": sorted(n for n in names if len(n) >= MIN_TITLE_NAME)}
+            for pid, (start, names) in sorted(found.items())]
+    if apps:
+        write_atomic(close_file(fid), json.dumps({"apps": apps}))
+    else:
+        drop_close_file(fid)
+    return len(apps)
+
+
+def hypr(*args):
+    cmd = os.environ.get("SFL_HYPRCTL") or shutil.which("hyprctl") or "hyprctl"
+    try:
+        return subprocess.run([cmd] + list(args), capture_output=True, timeout=3).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return b""
+
+
+def windows_by_pid():
+    try:
+        clients = json.loads(hypr("clients", "-j") or b"[]")
+    except ValueError:
+        return {}
+    out = {}
+    for c in clients if isinstance(clients, list) else []:
+        addr = str(c.get("address", ""))
+        if isinstance(c.get("pid"), int) and re.fullmatch(r"0x[0-9a-f]+", addr) \
+                and str(c.get("class", "")).lower() not in KEEP_CLASSES:
+            out.setdefault(c["pid"], []).append((addr, str(c.get("title", ""))))
+    return out
+
+
+def cmd_closeapps(args):
+    fid = args[0] if args else ""
+    if not ID_RE.match(fid):
+        raise Fail("folder.unknown")
+    try:
+        with open(close_file(fid), encoding="utf-8") as fh:
+            apps = json.load(fh).get("apps", [])
+    except (OSError, ValueError, AttributeError):
+        apps = []
+    drop_close_file(fid)
+    wins = windows_by_pid()
+    asked = []          # (pid, arranque, direcciones) que se pueden forzar
+    closed = 0
+    for app in apps if isinstance(apps, list) else []:
+        pid, start = app.get("pid"), app.get("start")
+        if not isinstance(pid, int) or pid_start_time(pid) != start or pid not in wins:
+            continue
+        mine = wins[pid]
+        if len(mine) == 1:
+            chosen = mine
+        else:
+            # Un programa con varias ventanas (LibreOffice, un navegador): solo las que nombran
+            # un archivo de la carpeta, y nunca se fuerza si le quedan otras.
+            names = [n for n in app.get("names", []) if isinstance(n, str) and len(n) >= MIN_TITLE_NAME]
+            chosen = [w for w in mine if any(n in w[1] for n in names)]
+        for addr, _title in chosen:
+            hypr("dispatch", 'hl.dsp.window.close({ window = "address:%s" })' % addr)
+            closed += 1
+        if chosen and len(chosen) == len(mine):
+            asked.append((pid, start, {a for a, _t in chosen}))
+    forced = 0
+    if asked:
+        end = time.time() + CLOSE_GRACE_SECONDS
+        while time.time() < end:
+            time.sleep(0.25)
+            open_now = {a for ws in windows_by_pid().values() for a, _t in ws}
+            asked = [x for x in asked if pid_start_time(x[0]) == x[1] and x[2] & open_now]
+            if not asked:
+                break
+        for pid, start, _addrs in asked:
+            forced += 1
+            for sig, wait in ((signal.SIGTERM, 2.0), (signal.SIGKILL, 0)):
+                if pid_start_time(pid) != start:
+                    break
+                try:
+                    os.kill(pid, sig)
+                except OSError:
+                    break
+                end = time.time() + wait
+                while time.time() < end and pid_start_time(pid) == start:
+                    time.sleep(0.1)
+    return {"id": fid, "closed": closed, "forced": forced}
 
 
 def drop_disk_dir(vault):
@@ -1055,7 +1271,7 @@ def cmd_info(args):
     fid = args[0] if args else ""
     f = get_folder(fid)
     out = {"id": fid, "name": f.get("name", ""), "mode": f.get("mode", "hidden"), "type": f.get("type", "encrypt")}
-    out.update({k: f.get(k) for k in RULE_KEYS + ("idleSeconds", "maxOpenSeconds")})  # reglas, nunca la ruta
+    out.update({k: f.get(k) for k in RULE_KEYS + ("idleSeconds", "maxOpenSeconds", "closeAppsSeconds")})  # reglas, nunca la ruta
     return out
 
 
@@ -1333,6 +1549,7 @@ def cmd_unlock(args):
     if fid and unprotecting() == fid:
         raise Fail("folder.unprotecting")
     folder = get_folder(fid)
+    drop_close_file(fid)
     if is_hide(folder):
         key = sys.stdin.readline().rstrip("\n")
         if not key:
@@ -1498,6 +1715,7 @@ def finish_lock(fid, info):
         settle_locked_path(fid, path)
         clean_thumbnails(path)
         clean_recent(path)
+        refresh_files(path)
     try:
         os.unlink(mount_file(fid))
     except FileNotFoundError:
@@ -1513,6 +1731,16 @@ def cmd_lock(args):
         f = get_folder(fid)
     except Fail:
         f = {}
+    apps = None
+    if args[1:] == ["apps"]:
+        apps = note_users(fid, f)
+    out = cmd_lock_now(fid, f)
+    if apps is not None:
+        out["apps"] = apps
+    return out
+
+
+def cmd_lock_now(fid, f):
     if is_hide(f):
         return {"id": fid, "wasOpen": hide_lock(fid, f)}
     info = read_mount(fid) or {}
@@ -1548,6 +1776,17 @@ def drop_old_temps():
                     os.unlink(full)
             except OSError:
                 pass
+    try:
+        names = [n for n in os.listdir(run_dir()) if CLOSE_RE.match(n)]
+    except OSError:
+        names = []
+    for n in names:
+        full = os.path.join(run_dir(), n)
+        try:
+            if time.time() - os.lstat(full).st_mtime > CLOSE_MAX_SECONDS + 3600:
+                os.unlink(full)
+        except OSError:
+            pass
 
 
 def cmd_lockall(_args):
@@ -1593,6 +1832,7 @@ COMMANDS = {
     "status": cmd_status,
     "unlock": cmd_unlock,
     "lock": cmd_lock,
+    "closeapps": cmd_closeapps,
     "lockall": cmd_lockall,
     "init": cmd_init,
     "update": cmd_update,

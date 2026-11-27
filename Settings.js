@@ -3,11 +3,14 @@
 // regla EFECTIVA de una carpeta: sus reglas crudas ("inherit" | "off" | "on") resueltas
 // contra los valores por defecto. Puro, se prueba con node (tests/test-settings.mjs).
 
-var RULES = ["idleLock", "workspaceLock", "screenLock", "openInFileManager", "maxOpenLock"]
+var RULES = ["idleLock", "workspaceLock", "screenLock", "openInFileManager", "maxOpenLock", "closeApps"]
 var IDLE_MIN = 60
 var IDLE_MAX = 7200
 var MAX_OPEN_MIN = 300
 var MAX_OPEN_MAX = 86400
+// Cerrar lo abierto de la carpeta, tanto después de bloquearla (2026-11-27).
+var CLOSE_MIN = 60
+var CLOSE_MAX = 86400
 var GATE_MIN = 30
 var GATE_MAX = 3600
 var TOP_BOOLS = ["showBarIcon", "showOpenDot", "notifyAutoLock", "hideOnShare"]
@@ -22,7 +25,7 @@ function defaults() {
     notifyAutoLock: false,
     hideOnShare: false,
     defaults: { idleLock: "on", idleSeconds: 600, workspaceLock: "on", screenLock: "on", openInFileManager: "on",
-                maxOpenLock: "off", maxOpenSeconds: 3600 }
+                maxOpenLock: "off", maxOpenSeconds: 3600, closeApps: "off", closeAppsSeconds: 1800 }
   }
 }
 
@@ -47,6 +50,7 @@ function normalize(raw) {
   }
   if (validSeconds(rd.idleSeconds)) d.defaults.idleSeconds = rd.idleSeconds
   if (validSeconds(rd.maxOpenSeconds, MAX_OPEN_MIN, MAX_OPEN_MAX)) d.defaults.maxOpenSeconds = rd.maxOpenSeconds
+  if (validSeconds(rd.closeAppsSeconds, CLOSE_MIN, CLOSE_MAX)) d.defaults.closeAppsSeconds = rd.closeAppsSeconds
   if (validSeconds(raw.gateTimeoutSeconds, GATE_MIN, GATE_MAX)) d.gateTimeoutSeconds = raw.gateTimeoutSeconds
   return d
 }
@@ -63,6 +67,7 @@ function effective(settings, rules) {
   }
   out.idleSeconds = validSeconds(r.idleSeconds) ? r.idleSeconds : s.defaults.idleSeconds
   out.maxOpenSeconds = validSeconds(r.maxOpenSeconds, MAX_OPEN_MIN, MAX_OPEN_MAX) ? r.maxOpenSeconds : s.defaults.maxOpenSeconds
+  out.closeAppsSeconds = validSeconds(r.closeAppsSeconds, CLOSE_MIN, CLOSE_MAX) ? r.closeAppsSeconds : s.defaults.closeAppsSeconds
   return out
 }
 
@@ -74,4 +79,4 @@ function withDefault(settings, key, value) {
   return normalize(next)
 }
 
-if (typeof module !== "undefined") module.exports = { defaults: defaults, normalize: normalize, effective: effective, withDefault: withDefault, IDLE_MIN: IDLE_MIN, MAX_OPEN_MIN: MAX_OPEN_MIN }
+if (typeof module !== "undefined") module.exports = { defaults: defaults, normalize: normalize, effective: effective, withDefault: withDefault, IDLE_MIN: IDLE_MIN, MAX_OPEN_MIN: MAX_OPEN_MIN, CLOSE_MIN: CLOSE_MIN }

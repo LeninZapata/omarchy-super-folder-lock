@@ -26,7 +26,7 @@ Item {
   readonly property string pathProblem: pathState.indexOf("error:") === 0 ? errText(pathState.slice(6))
     : kind === "encrypt" && pathState === "full" ? t("form.encryptFull")
     : kind === "hide" && !canHide && pathState !== "" && pathState !== "checking" ? t("error.hide.otherDisk") : ""
-  property var rules: ({ idleLock: "inherit", idleSeconds: null, workspaceLock: "inherit", screenLock: "inherit", openInFileManager: "inherit", maxOpenLock: "inherit", maxOpenSeconds: null })
+  property var rules: ({ idleLock: "inherit", idleSeconds: null, workspaceLock: "inherit", screenLock: "inherit", openInFileManager: "inherit", maxOpenLock: "inherit", maxOpenSeconds: null, closeApps: "inherit", closeAppsSeconds: null })
   property string error: ""
   property bool busy: false
   // Editar (M4.T6): solo nombre y reglas; la ruta y la clave no se tocan aquí.
@@ -43,6 +43,13 @@ Item {
     if (i === -1) i = 5
     setRule("maxOpenSeconds", maxSteps[Math.max(0, Math.min(maxSteps.length - 1, i + dir))])
   }
+  readonly property var closeSteps: [60, 300, 600, 900, 1800, 2700, 3600, 7200, 14400, 28800, 86400]
+  function stepClose(dir) {
+    var cur = rules.closeAppsSeconds || 1800
+    var i = closeSteps.indexOf(cur)
+    if (i === -1) i = 4
+    setRule("closeAppsSeconds", closeSteps[Math.max(0, Math.min(closeSteps.length - 1, i + dir))])
+  }
   function fmtMin(sec) { return sec >= 3600 && sec % 3600 === 0 ? t("form.hours").arg(sec / 3600) : t("form.minutes").arg(Math.round(sec / 60)) }
 
   function t(k) { return win ? win.t(k) : k }
@@ -56,7 +63,8 @@ Item {
     nameField.cursorPosition = nameField.text.length
     rules = ({ idleLock: f.idleLock || "inherit", idleSeconds: f.idleSeconds || null, workspaceLock: f.workspaceLock || "inherit",
                screenLock: f.screenLock || "inherit", openInFileManager: f.openInFileManager || "inherit",
-               maxOpenLock: f.maxOpenLock || "inherit", maxOpenSeconds: f.maxOpenSeconds || null })
+               maxOpenLock: f.maxOpenLock || "inherit", maxOpenSeconds: f.maxOpenSeconds || null,
+               closeApps: f.closeApps || "inherit", closeAppsSeconds: f.closeAppsSeconds || null })
     Qt.callLater(function() { nameField.forceActiveFocus() })
   }
 
@@ -76,7 +84,7 @@ Item {
     mode = "hidden"
     kind = "hide"
     canHide = true
-    rules = ({ idleLock: "inherit", idleSeconds: null, workspaceLock: "inherit", screenLock: "inherit", openInFileManager: "inherit", maxOpenLock: "inherit", maxOpenSeconds: null })
+    rules = ({ idleLock: "inherit", idleSeconds: null, workspaceLock: "inherit", screenLock: "inherit", openInFileManager: "inherit", maxOpenLock: "inherit", maxOpenSeconds: null, closeApps: "inherit", closeAppsSeconds: null })
     error = ""
     busy = false
     pathField.text = "~/"
@@ -227,7 +235,8 @@ Item {
   }
 
   Column {
-    anchors.fill: parent
+    id: fields
+    width: parent.width
     spacing: Style.space(10)
 
     Text {
@@ -433,6 +442,37 @@ Item {
     RuleRow { ruleKey: "screenLock"; label: form.t("rule.screen") }
 
     // No tiene que ver con bloquear: va en su propio grupo.
+    // Después de bloquearse: cerrar lo que se abrió desde ella (2026-11-27).
+    Rectangle { width: parent.width; height: Style.normalBorderWidth; color: form.win.lineColor }
+    Text {
+      textFormat: Text.PlainText
+      text: form.t("form.afterLock")
+      color: form.win.mutedFg
+      font.family: form.win.fontFamily
+      font.pixelSize: Style.font.caption
+    }
+    Row {
+      spacing: Style.space(12)
+      RuleRow { ruleKey: "closeApps"; label: form.t("rule.closeApps") }
+      Row {
+        spacing: Style.space(4)
+        visible: form.rules.closeApps === "on"
+        anchors.verticalCenter: parent.verticalCenter
+        Button { text: "−"; bordered: true; fontFamily: form.win.fontFamily; onClicked: form.stepClose(-1) }
+        Text {
+          anchors.verticalCenter: parent.verticalCenter
+          width: Style.space(64)
+          horizontalAlignment: Text.AlignHCenter
+          textFormat: Text.PlainText
+          text: form.fmtMin(form.rules.closeAppsSeconds || 1800)
+          color: form.win.fg
+          font.family: form.win.fontFamily
+          font.pixelSize: Style.font.body
+        }
+        Button { text: "+"; bordered: true; fontFamily: form.win.fontFamily; onClicked: form.stepClose(1) }
+      }
+    }
+
     Rectangle { width: parent.width; height: Style.normalBorderWidth; color: form.win.lineColor }
     Text {
       textFormat: Text.PlainText
@@ -453,20 +493,38 @@ Item {
       font.family: form.win.fontFamily
       font.pixelSize: Style.font.caption
     }
+  }
 
+  // Botones de control fuera de la columna, abajo a la derecha y tras una raya: pegados a la
+  // última opción parecían una opción más (Lenin, 2026-11-27). Si las opciones no caben, bajan
+  // tras ellas en vez de taparlas.
+  Item {
+    id: actions
+    width: parent.width
+    height: actionRow.height + Style.space(11)
+    y: Math.max(fields.y + fields.implicitHeight + Style.space(10), form.height - height)
+
+    Rectangle { width: parent.width; height: Style.normalBorderWidth; color: form.win.lineColor }
+    Text {
+      visible: form.error !== ""
+      anchors.left: parent.left
+      anchors.right: actionRow.left
+      anchors.rightMargin: Style.space(10)
+      anchors.verticalCenter: actionRow.verticalCenter
+      wrapMode: Text.Wrap
+      textFormat: Text.PlainText
+      text: form.error === "" ? "" : form.t(form.error === "error.path.notEmpty" ? "form.notEmpty" : form.error)
+      color: form.win.errorColor
+      font.family: form.win.fontFamily
+      font.pixelSize: Style.font.caption
+    }
     Row {
+      id: actionRow
+      anchors.right: parent.right
+      anchors.bottom: parent.bottom
       spacing: Style.space(10)
       Button { text: form.t("form.cancel"); bordered: true; fontFamily: form.win.fontFamily; onClicked: form.win.backToList() }
       Button { text: form.busy ? form.t("form.saving") : form.editing ? form.t("form.save") : form.readding ? form.t("orphans.readd") : form.t("form.create"); bordered: true; selected: true; fontFamily: form.win.fontFamily; onClicked: form.submit() }
-      Text {
-        visible: form.error !== ""
-        anchors.verticalCenter: parent.verticalCenter
-        textFormat: Text.PlainText
-        text: form.error === "" ? "" : form.t(form.error === "error.path.notEmpty" ? "form.notEmpty" : form.error)
-        color: form.win.errorColor
-        font.family: form.win.fontFamily
-        font.pixelSize: Style.font.caption
-      }
     }
   }
 }

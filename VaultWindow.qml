@@ -81,7 +81,7 @@ FloatingWindow {
       if (d && names.indexOf(d) === -1) names.push(d)
     }
     var n = service.orphanIds.length
-    return t(n === 1 ? "orphans.one" : "orphans.many").arg(n) + (names.length > 0 ? " (" + names.join(", ") + ")" : "")
+    return (n === 1 ? t("orphans.one") : t("orphans.many").arg(n)) + (names.length > 0 ? " (" + names.join(", ") + ")" : "")
   }
 
   function openReadd() {
@@ -138,6 +138,7 @@ FloatingWindow {
   readonly property var steps: ({
     idleLock: { key: "idleSeconds", list: [60, 120, 300, 600, 900, 1200, 1800, 2700, 3600, 5400, 7200] },
     maxOpenLock: { key: "maxOpenSeconds", list: [300, 600, 900, 1800, 2700, 3600, 5400, 7200, 10800, 14400, 28800, 43200, 86400] },
+    closeApps: { key: "closeAppsSeconds", list: [60, 300, 600, 900, 1800, 2700, 3600, 7200, 14400, 28800, 86400] },
     gateTimeoutSeconds: { key: "gateTimeoutSeconds", list: [30, 60, 120, 300, 600, 1800, 3600] }
   })
   function stepSetting(which, dir) {
@@ -543,6 +544,7 @@ FloatingWindow {
               { key: "maxOpenLock", label: "rule.maxOpen" },
               { key: "workspaceLock", label: "rule.workspace" },
               { key: "screenLock", label: "rule.screen" },
+              { key: "closeApps", label: "rule.closeApps", caption: "form.afterLock" },
               { key: "openInFileManager", label: "rule.openFm", caption: "form.whenOpening" }
             ]
             delegate: Column {
@@ -580,7 +582,7 @@ FloatingWindow {
                 onClicked: win.setDefault(modelData.key, modelData.top ? true : "on")
               }
               Row {
-                visible: (modelData.key === "idleLock" || modelData.key === "maxOpenLock") && parent.on
+                visible: (modelData.key === "idleLock" || modelData.key === "maxOpenLock" || modelData.key === "closeApps") && parent.on
                 spacing: Style.space(4)
                 anchors.verticalCenter: parent.verticalCenter
                 Button { text: "−"; bordered: true; fontFamily: win.fontFamily; onClicked: win.stepSetting(modelData.key, -1) }
@@ -589,7 +591,7 @@ FloatingWindow {
                   width: Style.space(64)
                   horizontalAlignment: Text.AlignHCenter
                   textFormat: Text.PlainText
-                  text: win.fmtSec(modelData.key === "idleLock" ? win.settings.defaults.idleSeconds : win.settings.defaults.maxOpenSeconds)
+                  text: win.steps[modelData.key] ? win.fmtSec(win.settings.defaults[win.steps[modelData.key].key]) : ""
                   color: win.fg
                   font.family: win.fontFamily
                   font.pixelSize: Style.font.body

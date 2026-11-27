@@ -162,5 +162,7 @@
   "forget.gone": "Its files no longer exist: remove it from the list",
   "error.forget.exists": "Its files are still there: use Remove protection",
   "form.whenOpening": "WHEN OPENING",
-  "settings.windowCaption": "THIS WINDOW"
+  "settings.windowCaption": "THIS WINDOW",
+  "form.afterLock": "AFTER LOCKING",
+  "rule.closeApps": "Close what it opened, after"
 }

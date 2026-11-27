@@ -153,6 +153,7 @@ Item {
     helper(recovery ? ["unlock", id, "recovery"] : ["unlock", id], key, function(r) {
       root.busyId = ""
       if (!r.ok) { root.setRowError(id, r.error); return }
+      root.cancelClose(id)
       var next = Object.assign({}, root.openFolders)
       // H1: copia de las reglas crudas (sin nombre ni ruta) para actuar con la puerta cerrada.
       next[id] = { workspaceId: ws, openedAt: Date.now(), rules: rules }
@@ -290,15 +291,24 @@ Item {
   function lock(id) {
     if (busyId !== "") return
     busyId = id
-    helper(["lock", id], "", function(r) {
+    var after = closeAfter(id)
+    helper(lockArgs(id, after), "", function(r) {
       root.busyId = ""
       root.forget(id)
       if (!r.ok) root.setRowError(id, r.error)
+      else root.scheduleClose(id, after, r)
       root.refresh()
     })
   }
 
   function lockAll() {
+    // Las que cierran lo suyo se bloquean una a una (el auxiliar apunta quién las usaba).
+    for (var id in openFolders) {
+      var after = closeAfter(id)
+      if (after > 0) (function(i, a) {
+        root.helper(root.lockArgs(i, a), "", function(r) { if (r.ok) root.scheduleClose(i, a, r) })
+      })(id, after)
+    }
     helper(["lockall"], "", function(r) {
       root.openFolders = ({})
       if (!r.ok) root.globalError = r.error
@@ -316,7 +326,8 @@ Item {
     if (!f) return {}
     return { idleLock: f.idleLock, idleSeconds: f.idleSeconds, workspaceLock: f.workspaceLock,
              screenLock: f.screenLock, openInFileManager: f.openInFileManager,
-             maxOpenLock: f.maxOpenLock, maxOpenSeconds: f.maxOpenSeconds }
+             maxOpenLock: f.maxOpenLock, maxOpenSeconds: f.maxOpenSeconds,
+             closeApps: f.closeApps, closeAppsSeconds: f.closeAppsSeconds }
   }
   function eff(rules) { return Settings.effective(settings, rules) }
 
@@ -343,8 +354,14 @@ Item {
   function lockAuto(ids, reason) {
     for (var i = 0; i < ids.length; i++) {
       var id = ids[i]
+      var after = closeAfter(id)
       forget(id)
-      helper(["lock", id], "", function(r) { root.refresh() })
+      ;(function(fid, a) {
+        root.helper(root.lockArgs(fid, a), "", function(r) {
+          if (r.ok) root.scheduleClose(fid, a, r)
+          root.refresh()
+        })
+      })(id, after)
       if (settings.notifyAutoLock) notifyLocked(id)
     }
     if (ids.length > 0) lastAutoLock = reason + ":" + ids.length
@@ -492,6 +509,44 @@ Item {
     now = Date.now()
   }
   function maxOpenOn(id) { return !!openFolders[id] && eff(openFolders[id].rules).maxOpenLock }
+
+  // ---------------------------------------------------------------- cerrar lo abierto (2026-11-27)
+  // Con la regla closeApps, al bloquear el auxiliar apunta qué programas usaban la carpeta
+  // (close-<id>.json, sin pasar por aquí); pasado el plazo se le pide `closeapps`. Aquí solo
+  // {id: cuándo}: ni nombres ni rutas. Si el shell se reinicia, lo pendiente se pierde.
+  property var pendingClose: ({})
+  function closeAfter(id) {
+    var o = openFolders[id]
+    if (!o) return 0
+    var e = eff(o.rules)
+    return e.closeApps ? e.closeAppsSeconds : 0
+  }
+  function lockArgs(id, after) { return after > 0 ? ["lock", id, "apps"] : ["lock", id] }
+  function scheduleClose(id, after, r) {
+    if (!(after > 0) || !r.data || !(r.data.apps > 0)) return
+    var next = Object.assign({}, pendingClose)
+    next[id] = Date.now() + after * 1000
+    pendingClose = next
+  }
+  function cancelClose(id) {
+    if (pendingClose[id] === undefined) return
+    var next = Object.assign({}, pendingClose)
+    delete next[id]
+    pendingClose = next
+  }
+  Timer {
+    interval: 10000
+    repeat: true
+    running: Object.keys(root.pendingClose).length > 0
+    onTriggered: {
+      var t = Date.now()
+      for (var id in root.pendingClose) {
+        if (root.pendingClose[id] > t || root.isOpen(id)) continue
+        root.cancelClose(id)
+        root.helper(["closeapps", id], "", function(r) {})
+      }
+    }
+  }
 
   // ---------------------------------------------------------------- la puerta caduca (B5)
   // Tras gateTimeoutSeconds sin tocar la ventana, la puerta se cierra y la lista se vacía.

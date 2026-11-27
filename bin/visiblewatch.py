@@ -6,7 +6,7 @@ doble clic, Nautilus abre el directorio (IN_OPEN) Y su ventana pasa a llamarse c
 carpeta. Lo primero solo no basta: el indexador (localsearch), `find` o `ls` también la
 abren. Por eso se avisa SOLO si en ±1,5 s aparece una ventana de Nautilus con ese nombre.
 Y no cuenta la ventana que YA estaba dentro cuando se bloqueó: al bloquearse, Nautilus vuelve
-a leer la carpeta y ya se llama como ella (pedía la clave sin doble clic, 2026-11-25).
+a leer la carpeta (el F5 que manda folderlock.py) y ya se llama como ella (pedía la clave sin doble clic, 2026-11-25).
 El título solo da el nombre, no la ruta: si la de arriba se llama igual, entrar en la
 de arriba también lo cumplía, porque Nautilus abre las subcarpetas para contarlas. Por eso,
 además, Nautilus tiene que estar VIGILANDO esa carpeta (inotify): solo vigila la que muestra.

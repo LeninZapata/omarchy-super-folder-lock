@@ -162,5 +162,7 @@
   "forget.gone": "Sus archivos ya no existen: quitarla del listado",
   "error.forget.exists": "Sus archivos siguen ahí: usa Quitar protección",
   "form.whenOpening": "AL ABRIR",
-  "settings.windowCaption": "ESTA VENTANA"
+  "settings.windowCaption": "ESTA VENTANA",
+  "form.afterLock": "DESPUÉS DE BLOQUEAR",
+  "rule.closeApps": "Cerrar lo abierto de ella, a los"
 }
