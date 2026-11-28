@@ -2,6 +2,12 @@
 
 > What changed, by version (newest first; the last 10 are kept).
 
+## 0.2.3 - 2026-11-28 10:29
+---
+- [fix] Files windows open in a subfolder of a folder that locks now reload too; before, they kept showing its files until F5
+- [fix] A Files window that was in a subfolder when its visible folder locked no longer asks for the password when it reloads into the empty folder
+- [update] Unlocking with "Show the folder after unlocking it" no longer opens a second window when Files already shows that folder: that window is refreshed instead
+
 ## 0.2.2 - 2026-11-27 12:32
 ---
 - [feature] New rule "Close what it opened, after" (off by default, 30 min): some time after a folder locks, the apps that opened its files are closed; their windows get a normal close request and, if they stay open, the app is stopped

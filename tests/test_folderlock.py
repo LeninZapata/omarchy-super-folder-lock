@@ -27,6 +27,8 @@ class Sandbox:
         # Todas las XDG_* dentro del sandbox: la sesión de Lenin define XDG_CACHE_HOME y
         # XDG_DATA_HOME, y sin esto el auxiliar miraría sus miniaturas y recientes reales.
         self.env = {k: v for k, v in os.environ.items() if not k.startswith("XDG_")}
+        # Files de verdad no se consulta: ninguna ruta (el F5 a subcarpetas tiene su prueba).
+        self.env["SFL_BUSCTL"] = shutil.which("true")
         self.env.update(HOME=self.home, XDG_RUNTIME_DIR=self.run,
                         XDG_CACHE_HOME=os.path.join(self.home, ".cache"),
                         XDG_DATA_HOME=os.path.join(self.home, ".local", "share"),

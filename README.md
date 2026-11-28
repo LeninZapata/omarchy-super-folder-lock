@@ -96,7 +96,7 @@ While locked, a folder of either type can be **Not shown** (it disappears from i
 - It writes one launcher entry, and its own folders (see [Data](#data)).
 - When a folder locks, it removes that folder's entries from the thumbnail cache and from `recently-used.xbel`. Nothing else in them changes.
 - It reads `/proc` for your own processes: which ones use a folder, and which folder Files is showing.
-- After unlocking or locking, it sends F5 to the Files windows with that folder's name, so they reload.
+- After unlocking or locking, it sends F5 to the Files windows showing that folder or one of its subfolders, so they reload. It asks Files over D-Bus which folder each window shows (read only; Files is never started for it).
 - Only with *Close what it opened* on: it closes those windows through Hyprland and, if one stays, sends
   `SIGTERM` (then `SIGKILL`) to that program alone, after checking it is still the same process.
 - While a folder or its window is open, it asks Omarchy every 2 seconds whether the screen is locked.
@@ -158,7 +158,7 @@ The rules apply to every folder left on **Default**:
 | Close what it opened, after | Off, 30 min | 1 min – 24 h, counted from the moment it locks |
 | Leaving its workspace | On | |
 | Screen locked | On | |
-| Show the folder after unlocking it | On | off: it unlocks, and the window stays open |
+| Show the folder after unlocking it | On | off: it unlocks, and the window stays open; on, a Files window already showing it is refreshed instead of opening another |
 | Ask for the password again after | 2 min | 30 s – 1 h |
 | Shortcut to open this window | None | press the keys; one already in use is never taken over |
 | Show icon in the bar | On | |

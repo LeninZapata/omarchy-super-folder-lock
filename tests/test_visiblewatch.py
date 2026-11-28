@@ -40,7 +40,14 @@ class VisibleWatchTest(unittest.TestCase):
         with open(fake, "w") as f:
             f.write("#!/bin/sh\ncat '%s'\n" % self.clients)
         os.chmod(fake, 0o755)
-        env = dict(self.sb.env, SFL_HYPRCTL=fake)
+        # Lo que Files dice por D-Bus que muestra (busctl falso)
+        self.locations = os.path.join(self.sb.base, "locations.json")
+        self.set_locations([])
+        bus = os.path.join(self.sb.base, "busctl")
+        with open(bus, "w") as f:
+            f.write("#!/bin/sh\ncat '%s'\n" % self.locations)
+        os.chmod(bus, 0o755)
+        env = dict(self.sb.env, SFL_HYPRCTL=fake, SFL_BUSCTL=bus)
         self.proc = subprocess.Popen(["python3", "-I", WATCH], stdout=subprocess.PIPE, text=True, env=env)
         # al acabar (orden inverso): matar → esperar → cerrar la tubería
         self.addCleanup(self.proc.stdout.close)
@@ -58,6 +65,10 @@ class VisibleWatchTest(unittest.TestCase):
             win["pid"] = pid
         with open(self.clients, "w") as f:
             json.dump([win], f)
+
+    def set_locations(self, paths):
+        with open(self.locations, "w") as f:
+            json.dump({"type": "a{sas}", "data": {"/org/gnome/Nautilus/window/1": ["file://" + p for p in paths]}}, f)
 
     def watch_as_nautilus(self, path):
         """Este proceso hace de Nautilus: vigila (inotify) la carpeta que «muestra»."""
@@ -121,6 +132,19 @@ class VisibleWatchTest(unittest.TestCase):
         os.listdir(self.path)           # Nautilus relee la carpeta al bloquearse: no es doble clic
         self.assertIsNone(self.line(2.5))
 
+    def test_window_in_a_subfolder_at_lock_is_ignored_after_f5(self):
+        # Estaba en Diario/fotos: se llama «fotos»; con el F5 sube a Diario, que no es doble clic
+        os.rmdir(self.path)
+        self.assertTrue(self.sb.helper("unlock", FID, stdin=KEY + "\n")["ok"])
+        time.sleep(0.6)
+        self.set_window("fotos")
+        self.set_locations([os.path.join(self.path, "fotos")])
+        self.assertTrue(self.sb.helper("lock", FID)["ok"])
+        time.sleep(0.8)
+        self.set_window("Diario", self.watch_as_nautilus(self.path))
+        os.listdir(self.path)
+        self.assertIsNone(self.line(2.5))
+
     def test_window_that_left_and_came_back_is_reported(self):
         self.lock_with_window_inside()
         self.set_window("Documentos")    # sale a la carpeta de arriba…
@@ -168,11 +192,75 @@ class FilesRefreshTest(unittest.TestCase):
             f.write('#!/bin/sh\nif [ "$1" = clients ]; then cat "%s/clients.json"; else echo "$2" >> "%s/sent"; fi\n' % (base, base))
         os.chmod(fake, 0o755)
         subprocess.run(["python3", "-I", os.path.join(HERE, "..", "bin", "filesrefresh.py"), "/algo/Diario/"],
-                       env=dict(os.environ, SFL_HYPRCTL=fake), check=True, timeout=10)
+                       env=dict(os.environ, SFL_HYPRCTL=fake, SFL_BUSCTL=shutil.which("true")), check=True, timeout=10)
         with open(os.path.join(base, "sent")) as f:
             sent = f.read().splitlines()
         self.assertEqual(sent, ['hl.dsp.send_shortcut({ mods = "", key = "F5", window = "address:%s" })' % a
                                 for a in ("0xa1", "0xa2")])
+
+    def test_files_window_in_a_subfolder_gets_f5(self):
+        # Files dice qué ruta muestra cada ventana; el título es solo el nombre de la subcarpeta
+        base = tempfile.mkdtemp(prefix="sfl-test-", dir="/tmp")
+        self.addCleanup(shutil.rmtree, base)
+        wins = [("org.gnome.Nautilus", "v", "0xb1"), ("org.gnome.Nautilus", "fotos", "0xb2"),
+                ("org.gnome.Nautilus", "otra", "0xb3")]
+        with open(os.path.join(base, "clients.json"), "w") as f:
+            json.dump([{"class": c, "title": t, "address": a} for c, t, a in wins], f)
+        uris = ["file:///algo/Diario/a%20b/v", "file:///algo/Diario2/otra", "file:///algo/fotos"]
+        with open(os.path.join(base, "locations.json"), "w") as f:
+            json.dump({"type": "a{sas}", "data": {"/w/1": uris[:1], "/w/2": uris[1:]}}, f)
+        fake = os.path.join(base, "hyprctl")
+        with open(fake, "w") as f:
+            f.write('#!/bin/sh\nif [ "$1" = clients ]; then cat "%s/clients.json"; else echo "$2" >> "%s/sent"; fi\n' % (base, base))
+        bus = os.path.join(base, "busctl")
+        with open(bus, "w") as f:
+            f.write('#!/bin/sh\ncat "%s/locations.json"\n' % base)
+        for x in (fake, bus):
+            os.chmod(x, 0o755)
+        subprocess.run(["python3", "-I", os.path.join(HERE, "..", "bin", "filesrefresh.py"), "/algo/Diario"],
+                       env=dict(os.environ, SFL_HYPRCTL=fake, SFL_BUSCTL=bus), check=True, timeout=10)
+        with open(os.path.join(base, "sent")) as f:
+            sent = f.read().splitlines()
+        self.assertEqual(sent, ['hl.dsp.send_shortcut({ mods = "", key = "F5", window = "address:0xb1" })'])
+
+
+class FilesOpenTest(unittest.TestCase):
+    """--open (desbloquear con «Mostrar la carpeta»): abre en Files solo si ninguna ventana la muestra."""
+
+    def run_open(self, locations):
+        base = tempfile.mkdtemp(prefix="sfl-test-", dir="/tmp")
+        self.addCleanup(shutil.rmtree, base)
+        with open(os.path.join(base, "clients.json"), "w") as f:
+            json.dump([{"class": "org.gnome.Nautilus", "title": "Diario", "address": "0xc1"}], f)
+        with open(os.path.join(base, "locations.json"), "w") as f:
+            json.dump({"type": "a{sas}", "data": {"/w/1": ["file://" + p for p in locations]}}, f)
+        scripts = {
+            "hyprctl": '[ "$1" = clients ] && cat "%s/clients.json" || echo "$2" >> "%s/sent"' % (base, base),
+            "busctl": 'cat "%s/locations.json"' % base,
+            "xdg-open": 'echo "$1" >> "%s/opened"' % base,
+        }
+        env = dict(os.environ)
+        for name, body in scripts.items():
+            exe = os.path.join(base, name)
+            with open(exe, "w") as f:
+                f.write("#!/bin/sh\n%s\n" % body)
+            os.chmod(exe, 0o755)
+        env.update(SFL_HYPRCTL=os.path.join(base, "hyprctl"), SFL_BUSCTL=os.path.join(base, "busctl"),
+                   SFL_XDG_OPEN=os.path.join(base, "xdg-open"))
+        subprocess.run(["python3", "-I", os.path.join(HERE, "..", "bin", "filesrefresh.py"), "--open", "/algo/Diario"],
+                       env=env, check=True, timeout=10)
+        read = lambda n: open(os.path.join(base, n)).read().splitlines() if os.path.exists(os.path.join(base, n)) else []
+        return read("sent"), read("opened")
+
+    def test_already_shown_is_only_refreshed(self):
+        sent, opened = self.run_open(["/algo/Diario"])
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(opened, [])
+
+    def test_not_shown_is_opened(self):
+        sent, opened = self.run_open(["/algo/Diario2", "/otra/Diario"])   # mismo nombre, otra ruta
+        self.assertEqual(len(sent), 1)                                    # el F5 va por el título
+        self.assertEqual(opened, ["/algo/Diario"])
 
 
 class WatchesTest(unittest.TestCase):

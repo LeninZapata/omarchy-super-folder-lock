@@ -26,6 +26,7 @@ import struct
 import subprocess
 import sys
 import time
+import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import folderlock  # noqa: E402  (mismo directorio; -I no lo añade solo)
@@ -60,6 +61,57 @@ def windows_named(name, clients=None):
     """{dirección: pid} de las ventanas del gestor de archivos que se llaman como la carpeta."""
     return {str(c.get("address", "")): c.get("pid") for c in (hyprctl_clients() if clients is None else clients)
             if str(c.get("class", "")).lower() in FILE_MANAGERS and c.get("title") == name}
+
+
+def file_manager_locations():
+    """Las rutas que muestra Files en cada ventana y pestaña, según el propio Files (D-Bus).
+
+    El título solo da el nombre de la carpeta que se ve: una ventana en una subcarpeta de la
+    bloqueada se llama como la subcarpeta, y ni se recargaba al bloquear ni contaba como «ya
+    estaba dentro» (2026-11-28). Tras mover la carpeta, Files sigue dando la ruta de antes.
+    `--auto-start=no`: preguntar no debe arrancar Files. Si no responde, ninguna ruta.
+    """
+    cmd = os.environ.get("SFL_BUSCTL") or shutil.which("busctl") or "busctl"
+    try:
+        out = subprocess.run([cmd, "--user", "--auto-start=no", "--json=short", "get-property",
+                              "org.freedesktop.FileManager1", "/org/freedesktop/FileManager1",
+                              "org.freedesktop.FileManager1", "OpenWindowsWithLocations"],
+                             capture_output=True, timeout=2).stdout
+        data = json.loads(out or b"{}").get("data") or {}
+    except (OSError, ValueError, AttributeError, subprocess.TimeoutExpired):
+        return []
+    paths = []
+    for uris in data.values() if isinstance(data, dict) else ():
+        for uri in uris if isinstance(uris, list) else ():
+            if isinstance(uri, str) and uri.startswith("file://"):
+                paths.append(urllib.parse.unquote(urllib.parse.urlsplit(uri).path))
+    return paths
+
+
+def shown_names(path):
+    """Los títulos de las ventanas de Files que muestran la carpeta o algo dentro de ella."""
+    root = path.rstrip("/")
+    names = {folder_name(root)}
+    for p in file_manager_locations():
+        p = p.rstrip("/")
+        if p == root or p.startswith(root + "/"):
+            names.add(folder_name(p))
+    return names
+
+
+def windows_titled(names, clients=None):
+    """{dirección: pid} de las ventanas de Files que se llaman como alguno de esos nombres."""
+    clients = hyprctl_clients() if clients is None else clients
+    out = {}
+    for name in names:
+        out.update(windows_named(name, clients))
+    return out
+
+
+def windows_showing(path, clients=None):
+    """{dirección: pid} de las ventanas de Files en la carpeta o en una de sus subcarpetas.
+    Va por el título: si otra se llama igual también entra (recargarla no cambia nada)."""
+    return windows_titled(shown_names(path), clients)
 
 
 def inotify_targets(pid, fd):
@@ -132,6 +184,7 @@ class Watcher:
         # arriba se llama igual y el título no cambia) ya no la vigilan.
         self.inside = {}
         self.reload_until = {}  # id -> hasta cuándo una recién bloqueada puede no vigilarla aún
+        self.reload_names = {}  # id -> títulos válidos mientras relee: ella y las subcarpetas donde estaban
         self.dirty = True
         self.removed = set()
 
@@ -166,13 +219,16 @@ class Watcher:
                 if self.inside.get(fid):
                     inside[fid] = self.inside[fid]
             else:
-                # Recién bloqueada: la ventana que la tenía abierta sigue dentro.
+                # Recién bloqueada: la ventana que la tenía abierta sigue dentro. También la que
+                # estaba en una subcarpeta: con el F5 sube a la carpeta, que no es un doble clic.
                 if clients is None:
                     clients = hyprctl_clients()
-                now = set(windows_named(folder_name(path), clients))
+                names = shown_names(path)
+                now = set(windows_titled(names, clients))
                 if now:
                     inside[fid] = now
                     self.reload_until[fid] = time.time() + RELOAD_SECONDS
+                    self.reload_names[fid] = names
         self.inside = inside
         # Una carpeta visible cuya ruta aún no existe (se está creando o la movieron): se
         # vuelve a intentar en la próxima vuelta (cada 5 s como mucho).
@@ -215,7 +271,12 @@ class Watcher:
             path, target = shown[fid]
             reloading = self.reload_until.get(fid, 0) > time.time()
             named = windows_named(folder_name(path), clients)
-            keep = {a for a in addrs if a in named and (reloading or watches(named[a], target))}
+            if reloading:
+                # Mientras relee aún puede no vigilarla, y llamarse como la subcarpeta donde estaba.
+                titled = windows_titled(self.reload_names.get(fid, {folder_name(path)}), clients)
+                keep = {a for a in addrs if a in titled}
+            else:
+                keep = {a for a in addrs if a in named and watches(named[a], target)}
             if keep:
                 kept[fid] = keep
         self.inside = kept

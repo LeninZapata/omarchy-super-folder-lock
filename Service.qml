@@ -133,11 +133,11 @@ Item {
   }
 
   // Las ventanas de Files que ya mostraban la carpeta siguen vacías hasta recargarse: se
-  // refrescan ANTES de abrir, porque xdg-open puede traer al frente justo una de ellas.
+  // refrescan, y con `show` se abre una nueva solo si ninguna la mostraba (--open).
   readonly property string filesRefreshPath: String(Qt.resolvedUrl("bin/filesrefresh.py")).replace(/^file:\/\//, "")
   function refreshFiles(path, show) {
-    if (show) Quickshell.execDetached(["sh", "-c", 'python3 -I "$1" "$2"; xdg-open "$2"', "sfl-open", filesRefreshPath, path])
-    else Quickshell.execDetached(["python3", "-I", filesRefreshPath, path])
+    Quickshell.execDetached(show ? ["python3", "-I", filesRefreshPath, "--open", path]
+                                 : ["python3", "-I", filesRefreshPath, path])
   }
 
   // La clave llega del campo, viaja por stdin y no se guarda en ninguna propiedad.
